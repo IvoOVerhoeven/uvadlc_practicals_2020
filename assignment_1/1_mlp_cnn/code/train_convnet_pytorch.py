@@ -12,6 +12,7 @@ import os
 from convnet_pytorch import ConvNet
 import cifar10_utils
 
+import time
 import torch
 import torch.nn as nn
 
@@ -24,6 +25,9 @@ OPTIMIZER_DEFAULT = 'ADAM'
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
+
+# Directory in which the models are saved
+MODEL_DIR_DEFAULT = './cifar10/models' 
 
 FLAGS = None
 
@@ -46,13 +50,9 @@ def accuracy(predictions, targets):
     Implement accuracy computation.
     """
     
-    ########################
-    # PUT YOUR CODE HERE  #
-    #######################
-    raise NotImplementedError
-    ########################
-    # END OF YOUR CODE    #
-    #######################
+    predictions_label = torch.argmax(predictions, dim = 1)
+    
+    accuracy = torch.mean((predictions_label == targets).double()).detach().item()
     
     return accuracy
 
@@ -70,13 +70,112 @@ def train():
     np.random.seed(42)
     torch.manual_seed(42)
     
-    ########################
-    # PUT YOUR CODE HERE  #
-    #######################
-    raise NotImplementedError
-    ########################
-    # END OF YOUR CODE    #
-    #######################
+    ##########################################################################
+    ### Private functions
+    ##########################################################################
+    def _data_transform(X, y, device):
+        # Push data to device
+        X = torch.tensor(X).to(device)
+        y = torch.tensor(y).to(device)
+        
+        # One-hot -> labels
+        t = torch.nonzero(y)[:,1]
+        
+        return X, y, t
+    
+    def _eval(X, y, device):
+        
+        X, y, t = _data_transform(X, y, device)
+        
+        output = model(X)
+        loss = loss_function(output, t).detach().item()
+        acc = accuracy(output, t)
+        
+        return loss, acc
+    
+    ##########################################################################
+    ### Training Code
+    ##########################################################################
+    
+    # Find the device and let Pytorch know
+    # From: https://stackoverflow.com/a/53374933/11692721
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print('Using device:', device)
+    if device.type == 'cuda': print(torch.cuda.get_device_name(0))
+    
+    # Model definition
+    model = ConvNet(3, 10)  
+    model = model.to(device)
+    
+    # Data sets
+    cifar10 = cifar10_utils.get_cifar10(FLAGS.data_dir)
+    
+    # Loss function and optimizer definition
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr = FLAGS.learning_rate)
+    
+    # List for loss curve
+    train_loss = []
+    test_loss = []
+    test_ACC = []
+    best_test_ACC = 0.0
+    
+    # Pretty print for inspecting training progress
+    t0 = time.time()
+    print('{:^62s}'.format('Performance on Test-set'))
+    print('-'*62)
+    print('{:^11s}|{:^11s}|{:^11s}|{:^11s}|{:^14s}'.format(
+        'Batch','Minute','Acc','Loss','dLoss' ))
+    print('-'*62)
+    
+    for batch in range(FLAGS.max_steps):
+        # Remove stored gradients
+        model.train()
+        optimizer.zero_grad()
+        
+        # Load a batch of data
+        X, y = cifar10['train'].next_batch(FLAGS.batch_size)
+        X, y, t = _data_transform(X, y, device)
+        
+        # Compute gradients and perform backprop/SGD step
+        train_loss_batch = loss_function(model(X), t)
+        train_loss.append([batch, train_loss_batch.item()])
+                
+        # Backprop
+        train_loss_batch.backward()
+        optimizer.step()
+        
+        # Evaluate on the whole test set every eval_freq and at end of training
+        if batch % FLAGS.eval_freq == 0 or batch == FLAGS.max_steps-1:
+            model.eval()
+            
+            batches = int(np.floor(cifar10['test'].num_examples / FLAGS.batch_size))
+            eval_loss, eval_ACC = [], []
+            for i in range(batches):
+                X, y = cifar10['test'].next_batch(FLAGS.batch_size)
+
+                batch_loss, batch_ACC = _eval(X, y, device)
+                
+                eval_loss.append(batch_loss)
+                eval_ACC.append(batch_ACC)
+
+            test_loss.append([batch, np.mean(eval_loss)])
+            test_ACC.append([batch, np.mean(eval_ACC)])
+                        
+            # Pretty progress print for eval
+            if batch == 0: past_loss = -np.inf
+            print('{:11}|{:>11.2f}|{:>10.2f}%|{:>11.2e}|{:>+11.2e}'.format(
+                batch, (time.time()-t0)/60, test_ACC[-1][1] * 100,
+                test_loss[-1][1], test_loss[-1][1] - past_loss ))
+            past_loss = test_loss[-1][1]
+            
+            if test_ACC[-1][1] > best_test_ACC:
+                torch.save(model.state_dict(), 
+                           os.path.join(FLAGS.model_dir + '/Convnet_pytorch'))
+        
+    with open(os.path.join(FLAGS.model_dir + '/Convnet_pytorch_losses'), 'wb') as file:
+        np.savez(file, train_loss, test_loss, test_ACC)
+        file.close()
 
 
 def print_flags():
@@ -114,6 +213,8 @@ if __name__ == '__main__':
                         help='Frequency of evaluation on the test set')
     parser.add_argument('--data_dir', type=str, default=DATA_DIR_DEFAULT,
                         help='Directory for storing input data')
+    parser.add_argument('--model_dir', type=str, default=MODEL_DIR_DEFAULT,
+                        help='Directory for storing trained models')
     FLAGS, unparsed = parser.parse_known_args()
     
     main()

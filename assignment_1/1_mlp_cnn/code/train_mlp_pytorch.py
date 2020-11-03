@@ -46,9 +46,6 @@ def accuracy(predictions, targets):
     Returns:
       accuracy: scalar float, the accuracy of predictions,
                 i.e. the average correct predictions over the whole batch
-    
-    TODO:
-    Implement accuracy computation.
     """
     
     predictions_label = torch.argmax(predictions, dim = 1)
@@ -61,9 +58,7 @@ def accuracy(predictions, targets):
 def train():
     """
     Performs training and evaluation of MLP model.
-  
-    TODO:
-    Implement training and evaluation of MLP model. Evaluate your model on the whole test set each eval_freq iterations.
+    
     """
     
     ### DO NOT CHANGE SEEDS!
@@ -178,11 +173,11 @@ def train():
             
             if eval_ACC > best_test_ACC:
                 torch.save(mlp.state_dict(), 
-                           os.path.join(FLAGS.model_dir + 'MLP_pytorch'))
+                           os.path.join(FLAGS.model_dir + '/MLP_pytorch'))
         
-        with open(os.path.join(FLAGS.model_dir + 'MLP_pytorch_losses'), 'wb') as file:
-            np.savez(file, train_loss, test_loss, test_ACC)
-            file.close()
+    with open(os.path.join(FLAGS.model_dir + '/MLP_pytorch_losses'), 'wb') as file:
+        np.savez(file, train_loss, test_loss, test_ACC)
+        file.close()
 
 def print_flags():
     """
