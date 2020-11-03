@@ -29,19 +29,34 @@ class MLP(nn.Module):
           n_classes: number of classes of the classification problem.
                      This number is required in order to specify the
                      output dimensions of the MLP
-    
-        TODO:
-        Implement initialization of the network.
         """
+        super(MLP, self).__init__()       
         
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-        raise NotImplementedError
-        ########################
-        # END OF YOUR CODE    #
-        #######################
-    
+        dims = []
+        dims.append(n_inputs)
+        dims.extend(n_hidden)
+        dims.append(n_classes)
+        
+        self.layers = nn.ModuleList()
+        for l, neurons in enumerate(dims):
+            if l == 0:
+                continue
+            
+            self.layers.append(nn.Linear(dims[l-1], neurons))
+            
+            # Same init as the numpy implementation for similar eval scores
+            nn.init.normal_(self.layers[-1].weight, 
+                            mean = 0.0, std =  0.0001)
+            nn.init.constant_(self.layers[-1].bias, 0)
+            
+            # Add activations. Last layer is special
+            if l == len(dims)-1: 
+                # DO NOT ADD SOFTMAX, loss function does this already...
+                #self.layers.append(nn.Softmax(dim=0))
+                continue
+            else: 
+                self.layers.append(nn.ELU())
+           
     def forward(self, x):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
@@ -51,17 +66,9 @@ class MLP(nn.Module):
           x: input to the network
         Returns:
           out: outputs of the network
-        
-        TODO:
-        Implement forward pass of the network.
         """
         
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-        raise NotImplementedError
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        for i, layer in enumerate(self.layers):
+            x = layer(x)
         
-        return out
+        return x

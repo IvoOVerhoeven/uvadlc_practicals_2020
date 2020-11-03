@@ -9,8 +9,10 @@ from __future__ import print_function
 import argparse
 import numpy as np
 import os
-from mlp_pytorch import MLP
+import mlp_pytorch
 import cifar10_utils
+
+import time
 
 import torch
 import torch.nn as nn
@@ -21,10 +23,12 @@ LEARNING_RATE_DEFAULT = 1e-3
 MAX_STEPS_DEFAULT = 1400
 BATCH_SIZE_DEFAULT = 200
 EVAL_FREQ_DEFAULT = 100
-NEG_SLOPE_DEFAULT = 0.02
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
+
+# Directory in which the models are saved
+MODEL_DIR_DEFAULT = './cifar10/models' 
 
 FLAGS = None
 
@@ -47,13 +51,9 @@ def accuracy(predictions, targets):
     Implement accuracy computation.
     """
     
-    ########################
-    # PUT YOUR CODE HERE  #
-    #######################
-    raise NotImplementedError
-    ########################
-    # END OF YOUR CODE    #
-    #######################
+    predictions_label = torch.argmax(predictions, dim = 1)
+    
+    accuracy = torch.mean((predictions_label == targets).double()).item()
     
     return accuracy
 
@@ -79,16 +79,110 @@ def train():
     else:
         dnn_hidden_units = []
     
-    neg_slope = FLAGS.neg_slope
+    ##########################################################################
+    ### Private functions
+    ##########################################################################
+    def _data_transform(X, y, device):
+        
+        n_features = np.prod(X.shape[-3:])
+        X = X.reshape(X.shape[0], n_features)
+        
+        # Push data to device
+        X = torch.tensor(X).to(device)
+        y = torch.tensor(y).to(device)
+        
+        # One-hot -> labels
+        t = torch.nonzero(y)[:,1]
+        
+        return X, y, t
     
-    ########################
-    # PUT YOUR CODE HERE  #
-    #######################
-    raise NotImplementedError
-    ########################
-    # END OF YOUR CODE    #
-    #######################
-
+    def _eval(X, y, device):
+        
+        X, y, t = _data_transform(X, y, device)
+        
+        output = mlp(X)
+        loss = loss_function(output, t)
+        #print(output.shape, t.shape)
+        acc = accuracy(output, t)
+        
+        return loss, acc
+    
+    ##########################################################################
+    ### Training Code
+    ##########################################################################
+    
+    # Find the device and let Pytorch know
+    # From: https://stackoverflow.com/a/53374933/11692721
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print('Using device:', device)
+    if device.type == 'cuda': print(torch.cuda.get_device_name(0))
+    
+    # Model definition
+    mlp = mlp_pytorch.MLP(32 * 32 * 3, dnn_hidden_units, 10)  
+    mlp = mlp.to(device)
+    
+    # Data sets
+    cifar10 = cifar10_utils.get_cifar10(FLAGS.data_dir)
+    
+    # Loss function and optimizer definition
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(mlp.parameters(), lr = FLAGS.learning_rate)
+    
+    # List for loss curve
+    train_loss = []
+    test_loss = []
+    test_ACC = []
+    best_test_ACC = 0.0
+    
+    # Pretty print for inspecting training progress
+    t0 = time.time()
+    print('{:^62s}'.format('Performance on Test-set'))
+    print('-'*62)
+    print('{:^11s}|{:^11s}|{:^11s}|{:^11s}|{:^14s}'.format(
+        'Batch','Minute','Acc','Loss','dLoss' ))
+    print('-'*62)
+    
+    for batch in range(FLAGS.max_steps):
+        # Remove stored gradients
+        mlp.train()
+        optimizer.zero_grad()
+        
+        # Load a batch of data
+        X, y = cifar10['train'].next_batch(FLAGS.batch_size)
+        X, y, t = _data_transform(X, y, device)
+        
+        # Compute gradients and perform backprop/SGD step
+        train_loss_batch = loss_function(mlp(X), t)
+        train_loss.append([batch, train_loss_batch.item()])
+                
+        # Backprop
+        train_loss_batch.backward()
+        optimizer.step()
+        
+        # Evaluate on the whole test set every eval_freq and at end of training
+        if batch % FLAGS.eval_freq == 0 or batch == FLAGS.max_steps-1:
+            mlp.eval()
+            X_test, y_test = cifar10['test'].images, cifar10['test'].labels
+            
+            eval_loss, eval_ACC = _eval(X_test, y_test, device)
+            
+            test_loss.append([batch, eval_loss.item()])
+            test_ACC.append([batch, eval_ACC])
+                        
+            # Pretty progress print for eval
+            if batch == 0: past_loss = -np.inf
+            print('{:11}|{:>11.2f}|{:>10.2f}%|{:>11.2e}|{:>+11.2e}'.format(
+                batch, (time.time()-t0)/60, eval_ACC * 100,
+                eval_loss, eval_loss - past_loss ))
+            past_loss = eval_loss
+            
+            if eval_ACC > best_test_ACC:
+                torch.save(mlp.state_dict(), 
+                           os.path.join(FLAGS.model_dir + 'MLP_pytorch'))
+        
+        with open(os.path.join(FLAGS.model_dir + 'MLP_pytorch_losses'), 'wb') as file:
+            np.savez(file, train_loss, test_loss, test_ACC)
+            file.close()
 
 def print_flags():
     """
@@ -127,6 +221,8 @@ if __name__ == '__main__':
                         help='Frequency of evaluation on the test set')
     parser.add_argument('--data_dir', type=str, default=DATA_DIR_DEFAULT,
                         help='Directory for storing input data')
+    parser.add_argument('--model_dir', type=str, default=MODEL_DIR_DEFAULT,
+                        help='Directory for storing trained models')
     FLAGS, unparsed = parser.parse_known_args()
     
     main()
