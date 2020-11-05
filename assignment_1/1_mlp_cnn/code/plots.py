@@ -1,6 +1,7 @@
 """Generating plots."""
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 def loss_plots(loss_loc = '.', title = ''):
 
@@ -35,7 +36,8 @@ def loss_plots(loss_loc = '.', title = ''):
     fig.suptitle(title)
     fig.legend(bbox_to_anchor=(1, 0.9), loc='upper left')
     
-    fig.savefig('../figures/PytorchDefaultMLP.pdf', bbox_inches='tight')
+    fig.savefig(os.path.join('../figures/' + title + '.pdf'), 
+                bbox_inches='tight')
     
     return fig
 
@@ -44,10 +46,10 @@ def loss_plots(loss_loc = '.', title = ''):
 ##############################################################################
 
 fig1 = loss_plots('./cifar10/models/MLP_Numpy_losses', 'Numpy MLP - Default')
-fig1
+fig1.show()
 
 fig2 = loss_plots('./cifar10/models/MLP_pytorch_losses', 'Pytorch MLP - Default')
-fig2
+fig2.show()
 
 fig3 = loss_plots('./cifar10/models/Convnet_pytorch_losses', 'Pytorch Convnet')
-fig3
+fig3.show()
