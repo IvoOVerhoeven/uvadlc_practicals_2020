@@ -34,13 +34,18 @@ class MLP(object):
         Implement initialization of the network.
         """
 
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-        raise NotImplementedError
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        dims = [n_inputs] + n_hidden + [n_classes]
+
+        self.modules = []
+        for l, neurons in enumerate(dims):
+            if l == 0:
+                continue
+    
+            self.modules.append(LinearModule(dims[l-1], neurons))
+            if l < len(dims) - 1:
+                self.modules.append(ELUModule())
+            else:
+                self.modules.append(SoftMaxModule())
 
     def forward(self, x):
         """
@@ -56,13 +61,9 @@ class MLP(object):
         Implement forward pass of the network.
         """
 
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-        raise NotImplementedError
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        out = x.copy()
+        for module in self.modules:
+            out = module.forward(out)
 
         return out
 
@@ -76,13 +77,10 @@ class MLP(object):
         TODO:
         Implement backward pass of the network.
         """
-
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-        raise NotImplementedError
-        ########################
-        # END OF YOUR CODE    #
-        #######################
-
+        
+        dy = dout.copy()
+        
+        for module in reversed(self.modules):
+            dy = module.backward(dy)
+                
         return

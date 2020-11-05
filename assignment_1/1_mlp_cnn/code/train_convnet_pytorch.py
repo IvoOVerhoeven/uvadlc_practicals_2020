@@ -46,8 +46,6 @@ def accuracy(predictions, targets):
       accuracy: scalar float, the accuracy of predictions,
                 i.e. the average correct predictions over the whole batch
     
-    TODO:
-    Implement accuracy computation.
     """
     
     predictions_label = torch.argmax(predictions, dim = 1)
@@ -62,7 +60,9 @@ def train():
     Performs training and evaluation of ConvNet model.
   
     TODO:
-    Implement training and evaluation of ConvNet model. Evaluate your model on the whole test set each eval_freq iterations.
+    Implement training and evaluation of ConvNet model. Evaluate your model on 
+    the whole test set each eval_freq iterations.
+    
     """
     
     ### DO NOT CHANGE SEEDS!

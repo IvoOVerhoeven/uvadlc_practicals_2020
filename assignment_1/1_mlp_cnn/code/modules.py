@@ -24,7 +24,7 @@ class LinearModule(object):
         
         w = np.random.normal(loc = 0, scale = 0.0001, 
                              size = (self.out_features, self.in_features))
-        b = np.zeros((1, self.out_features))
+        b = np.zeros((self.out_features, 1))
         
         self.params = dict()
         self.params['weight'] = w
@@ -46,7 +46,7 @@ class LinearModule(object):
         
         self.x = x
         
-        B = np.repeat(self.params['bias'], x.shape[0], axis = 0)
+        B = np.repeat(self.params['bias'].T, x.shape[0], axis = 0)
         
         Y = x @ self.params['weight'].T + B
         
@@ -66,9 +66,10 @@ class LinearModule(object):
         layer parameters in self.grads['weight'] and self.grads['bias'].
         """
         
-        dx = dout @ self.grads['weight']
         self.grads['weight'] = dout.T @ self.x
         self.grads['bias'] = dout.T @ np.ones((self.x.shape[0], 1))
+        
+        dx = dout @ self.params['weight']
         
         return dx
 
@@ -76,6 +77,7 @@ class LinearModule(object):
 class SoftMaxModule(object):
     """
     Softmax activation module.
+    
     """
     
     def forward(self, x):
@@ -108,18 +110,12 @@ class SoftMaxModule(object):
           dx: gradients with respect to the input of the module
         """
         
-        self.dx = np.zeros_like(self.softmax_vals)
-        for node in range(self.softmax_vals.shape[1]):
-            # Multivariate version of the kronecker delta
-            delta = np.zeros_like(self.softmax_vals)
-            delta[:, node] = np.ones(self.softmax_vals.shape[0])
-            
-            # Intermediate result. Can be optimised if it is known that the
-            # CE-loss module follows.
-            dydx = self.softmax_vals * (delta-self.softmax_vals)
-            self.dx[:, node] = np.sum( dydx * dout, 1)
+        dx = np.zeros_like(dout)
+        for sample, softmax in enumerate(self.softmax_vals):
+            dydx = np.diag(softmax) - np.outer(softmax, softmax)
+            dx[sample] = dydx @ dout[sample]
         
-        return self.dx
+        return dx
 
 
 class CrossEntropyModule(object):
@@ -136,14 +132,8 @@ class CrossEntropyModule(object):
         Returns:
           out: cross entropy loss
         """
-        
-        # Given that we don' need to specify values for each of the input
-        # we're free to be smart about how to retrieve the loss.
-        
-        #rel_vals = x[np.arange(0, y.shape[0]), y]
-        rel_vals =  np.sum(np.multiply(y, x), 1)
-        
-        self.loss = -np.mean(np.log(rel_vals))
+                
+        self.loss = np.mean(-np.sum(y * np.log(x), 1))
         
         return self.loss
     
@@ -155,13 +145,10 @@ class CrossEntropyModule(object):
           y: labels of the input
         Returns:
           dx: gradient of the loss with the respect to the input x.
-    
-        TODO:
-        Implement backward pass of the module.
+
         """
         
-        rel_vals = np.sum(np.multiply(y, np.log(x)), 1)
-        dx = - np.divide(np.divide(1, rel_vals), x.shape[0])
+        dx = - (1/x.shape[0]) * (y/x)
         
         return dx
 
@@ -180,10 +167,11 @@ class ELUModule(object):
         Returns:
           out: output of the module
         """
+    
+        self.out = x.copy()
+        self.out[self.out <= 0] = np.exp(self.out[self.out <= 0])-1
         
-        self.activation = np.where(x >= 0, x, np.exp(x))
-        
-        return self.activation
+        return self.out
     
     def backward(self, dout):
         """
@@ -194,7 +182,7 @@ class ELUModule(object):
           dx: gradients with respect to the input of the module
         """
         
-        dydx = np.where(self.x >= 0, np.ones_like(self.x), np.exp(self.x))
+        dydx = np.where(self.out > 0, 1, self.out+1)
         dx = np.multiply(dydx, dout)
         
         return dx

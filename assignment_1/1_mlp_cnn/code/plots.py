@@ -36,11 +36,18 @@ def loss_plots(loss_loc = '.', title = ''):
     fig.legend(bbox_to_anchor=(1, 0.9), loc='upper left')
     
     fig.savefig('../figures/PytorchDefaultMLP.pdf', bbox_inches='tight')
-    fig.show()
+    
+    return fig
 
 ##############################################################################
 ### Pytorch MLP - Default parameters
 ##############################################################################
-loss_plots('./cifar10/models/MLP_pytorch_losses', 'Pytorch MLP - Default')
 
-loss_plots('./cifar10/models/Convnet_pytorch_losses', 'Pytorch Convnet')
+fig1 = loss_plots('./cifar10/models/MLP_Numpy_losses', 'Numpy MLP - Default')
+fig1
+
+fig2 = loss_plots('./cifar10/models/MLP_pytorch_losses', 'Pytorch MLP - Default')
+fig2
+
+fig3 = loss_plots('./cifar10/models/Convnet_pytorch_losses', 'Pytorch Convnet')
+fig3

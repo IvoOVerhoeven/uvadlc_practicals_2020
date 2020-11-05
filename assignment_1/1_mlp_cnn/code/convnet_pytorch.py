@@ -97,13 +97,13 @@ class PreActResNetBlock(nn.Module):
         """
         super().__init__()
         
-        self.downsample = nn.Sequential(
+        self.net = nn.Sequential(
             nn.BatchNorm2d(c),
             nn.ReLU(True),
             nn.Conv2d(c, c, kernel_size=1, stride=1, bias=False)
         )
 
     def forward(self, x):
-        z = self.downsample(x)
+        z = self.net(x)
         out = x + z
         return out
