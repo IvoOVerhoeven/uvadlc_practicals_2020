@@ -51,5 +51,5 @@ fig1.show()
 fig2 = loss_plots('./cifar10/models/MLP_pytorch_losses', 'Pytorch MLP - Default')
 fig2.show()
 
-fig3 = loss_plots('./cifar10/models/Convnet_pytorch_losses', 'Pytorch Convnet')
+fig3 = loss_plots('./cifar10/models/Convnet_pytorch_losses_v2', 'Pytorch Convnet')
 fig3.show()

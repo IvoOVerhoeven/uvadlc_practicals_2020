@@ -21,7 +21,6 @@ LEARNING_RATE_DEFAULT = 1e-4
 BATCH_SIZE_DEFAULT = 32
 MAX_STEPS_DEFAULT = 5000
 EVAL_FREQ_DEFAULT = 500
-OPTIMIZER_DEFAULT = 'ADAM'
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
@@ -112,6 +111,7 @@ def train():
     
     # Loss function and optimizer definition
     loss_function = nn.CrossEntropyLoss()
+    
     optimizer = torch.optim.Adam(model.parameters(), lr = FLAGS.learning_rate)
     
     # List for loss curve
@@ -171,9 +171,9 @@ def train():
             
             if test_ACC[-1][1] > best_test_ACC:
                 torch.save(model.state_dict(), 
-                           os.path.join(FLAGS.model_dir + '/Convnet_pytorch'))
+                           os.path.join(FLAGS.model_dir + '/Convnet_pytorch_v2'))
         
-    with open(os.path.join(FLAGS.model_dir + '/Convnet_pytorch_losses'), 'wb') as file:
+    with open(os.path.join(FLAGS.model_dir + '/Convnet_pytorch_losses_v2'), 'wb') as file:
         np.savez(file, train_loss, test_loss, test_ACC)
         file.close()
 

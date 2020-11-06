@@ -100,7 +100,7 @@ class PreActResNetBlock(nn.Module):
         self.net = nn.Sequential(
             nn.BatchNorm2d(c),
             nn.ReLU(True),
-            nn.Conv2d(c, c, kernel_size=1, stride=1, bias=False)
+            nn.Conv2d(c, c, kernel_size=3, stride=1, padding=1)
         )
 
     def forward(self, x):
