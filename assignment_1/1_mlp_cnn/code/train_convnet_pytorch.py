@@ -57,11 +57,7 @@ def accuracy(predictions, targets):
 def train():
     """
     Performs training and evaluation of ConvNet model.
-  
-    TODO:
-    Implement training and evaluation of ConvNet model. Evaluate your model on 
-    the whole test set each eval_freq iterations.
-    
+      
     """
     
     ### DO NOT CHANGE SEEDS!
@@ -116,8 +112,8 @@ def train():
     
     # List for loss curve
     train_loss = []
-    test_loss = []
-    test_ACC = []
+    test_loss  = []
+    test_ACC   = []
     best_test_ACC = 0.0
     
     # Pretty print for inspecting training progress
