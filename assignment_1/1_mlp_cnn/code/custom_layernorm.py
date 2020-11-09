@@ -35,17 +35,16 @@ class CustomLayerNormAutograd(nn.Module):
         """
         super(CustomLayerNormAutograd, self).__init__()
         
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
+        self.n_neurons = n_neurons
         
-        raise NotImplementedError
+        # Using nn.Parameter automatically registers it
+        self.gamma = nn.Parameter(torch.ones(n_neurons), requires_grad = True)
+        self.beta  = nn.Parameter(torch.zeros(n_neurons), requires_grad = True)
         
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        self.eps   = eps
+        
     
-    def forward(self, input):
+    def forward(self, X):
         """
         Compute the layer normalization
         
@@ -54,23 +53,18 @@ class CustomLayerNormAutograd(nn.Module):
         Returns:
           out: layer-normalized tensor
         
-        TODO:
-          Check for the correctness of the shape of the input tensor.
-          Implement layer normalization forward pass as given in the assignment.
-          For the case that you make use of torch.var be aware that the flag unbiased=False should be set.
         """
         
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-
-        raise NotImplementedError
-
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        if X.shape[1] != self.n_neurons:
+            raise ValueError('Input of wrong shape. Expected {:d} for layersize, not {:d}'.format(self.n_neurons, X.shape[1]))
         
-        return out
+        mu     = torch.mean(X, dim = 1, keepdim=True)
+        sigma2 = torch.var(X, dim = 1, keepdim=True, unbiased=False)
+        Xhat   = (X - mu) / torch.sqrt(sigma2 + self.eps)
+
+        Y = self.gamma * Xhat + self.beta
+        
+        return Y
 
 
 ######################################################################################
@@ -115,17 +109,16 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
           For the case that you make use of torch.var be aware that the flag unbiased=False should be set.
         """
         
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-        
-        raise NotImplementedError
+        mu     = torch.mean(input, dim = 1, keepdim=True)
+        sigma2 = torch.var(input, dim = 1, keepdim=True, unbiased=False)
+        Xhat   = (input - mu) / torch.sqrt(sigma2 + eps)
 
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        Y = gamma * Xhat + beta
         
-        return out
+        ctx.save_for_backward(input, mu, gamma, sigma2)
+        ctx.eps = eps
+        
+        return Y
     
     @staticmethod
     def backward(ctx, grad_output):
@@ -144,15 +137,23 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
           inputs to None. This should be decided dynamically.
         """
         
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-
-        raise NotImplementedError
+        input, mu, gamma, sigma2 = ctx.saved_tensors
         
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        M = input.shape[1]
+        
+        Xhat   = (input - mu) / torch.sqrt(sigma2 + ctx.eps)
+        
+        grad_beta  = torch.sum(Xhat * grad_output, dim = 0, keepdim=True)
+
+        grad_gamma = torch.sum(grad_output, dim = 0, keepdim=True)
+        
+        dXhatdx = grad_output * gamma
+        
+        grad_input = 1/(M * torch.sqrt(sigma2 + ctx.eps)) * \
+            (M * dXhatdx - torch.sum(dXhatdx, dim = 1, keepdim = True) - \
+             Xhat * torch.sum((dXhatdx * Xhat), dim = 1, keepdim = True))
+        print(grad_input.shape)
+
         
         # return gradients of the three tensor inputs and None for the constant eps
         return grad_input, grad_gamma, grad_beta, None
@@ -183,15 +184,13 @@ class CustomLayerNormManualModule(nn.Module):
         """
         super(CustomLayerNormManualModule, self).__init__()
         
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-
-        raise NotImplementedError
+        self.n_neurons = n_neurons
         
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        # Using nn.Parameter automatically registers it
+        self.gamma = nn.Parameter(torch.ones(n_neurons), requires_grad = True)
+        self.beta  = nn.Parameter(torch.zeros(n_neurons), requires_grad = True)
+        
+        self.eps   = eps
     
     def forward(self, input):
         """
@@ -208,15 +207,8 @@ class CustomLayerNormManualModule(nn.Module):
           Call it via its .apply() method.
         """
         
-        ########################
-        # PUT YOUR CODE HERE  #
-        #######################
-
-        raise NotImplementedError
-        
-        ########################
-        # END OF YOUR CODE    #
-        #######################
+        LN = CustomLayerNormManualFunction()
+        out = CustomLayerNormManualFunction.apply(input, self.gamma, self.beta, self.eps)
         
         return out
 

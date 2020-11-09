@@ -124,9 +124,9 @@ def train():
         'Batch','Minute','Acc','Loss','dLoss' ))
     print('-'*62)
     
+    model.train()
     for batch in range(FLAGS.max_steps):
         # Remove stored gradients
-        model.train()
         optimizer.zero_grad()
         
         # Load a batch of data
@@ -150,7 +150,7 @@ def train():
             for i in range(batches):
                 X, y = cifar10['test'].next_batch(FLAGS.batch_size)
 
-                batch_loss, batch_ACC = _eval(X, y, device)
+                batch_loss, batch_ACC = _eval( X, y, device)
                 
                 eval_loss.append(batch_loss)
                 eval_ACC.append(batch_ACC)
@@ -167,9 +167,11 @@ def train():
             
             if test_ACC[-1][1] > best_test_ACC:
                 torch.save(model.state_dict(), 
-                           os.path.join(FLAGS.model_dir + '/Convnet_pytorch_v2'))
+                           os.path.join(FLAGS.model_dir + '/Convnet_pytorch_v3'))
+            
+            model.train()
         
-    with open(os.path.join(FLAGS.model_dir + '/Convnet_pytorch_losses_v2'), 'wb') as file:
+    with open(os.path.join(FLAGS.model_dir + '/Convnet_pytorch_losses_v3'), 'wb') as file:
         np.savez(file, train_loss, test_loss, test_ACC)
         file.close()
 
