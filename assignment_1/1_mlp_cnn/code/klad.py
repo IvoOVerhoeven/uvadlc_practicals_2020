@@ -28,6 +28,10 @@ beta = 100 * torch.arange(n_neurons, dtype=torch.float64, requires_grad=True)
 bn_manual_fct = CustomLayerNormManualFunction(n_neurons)
 y_manual_fct = bn_manual_fct.apply(input, gamma, beta)
 
+bn_manual_fct.grad
+
+
+
 torch.mean((y_manual_fct - beta)/gamma)
 
 import torchvision

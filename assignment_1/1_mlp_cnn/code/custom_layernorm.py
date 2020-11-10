@@ -115,7 +115,7 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
 
         Y = gamma * Xhat + beta
         
-        ctx.save_for_backward(input, mu, gamma, sigma2)
+        ctx.save_for_backward(gamma, beta, Xhat, sigma2)
         ctx.eps = eps
         
         return Y
@@ -136,24 +136,37 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
           Compute gradients for inputs where ctx.needs_input_grad[idx] is True. Set gradients for other
           inputs to None. This should be decided dynamically.
         """
+    
+        # Retrieve the stored tensors and compute needed quantities   
+        # Now in order of derivations
+        gamma, beta, Xhat, sigma2 = ctx.saved_tensors
+                
+        S, M = Xhat.shape
+        dLdXhat = grad_output * gamma
         
-        input, mu, gamma, sigma2 = ctx.saved_tensors
+        grad_input, grad_gamma, grad_beta =  None, None, None
         
-        M = input.shape[1]
+        # Gradient w.r.t. gamma
+        if ctx.needs_input_grad[0] == True:
+            grad_gamma = torch.sum(Xhat * grad_output, dim = 0, keepdims = True)
+        else:
+            grad_gamma = None
+            
+        # Gradient w.r.t. beta
+        if ctx.needs_input_grad[1] == True:
+            grad_beta = torch.sum(grad_output, dim = 0, keepdims = True)
+        else:
+            grad_beta = None
         
-        Xhat   = (input - mu) / torch.sqrt(sigma2 + ctx.eps)
+        # Gradient w.r.t. input
+        if ctx.needs_input_grad[2] == True:
+            grad_input  = dLdXhat
+            grad_input -= torch.sum(dLdXhat, dim = 1, keepdims = True)/M
+            grad_input -= Xhat*torch.sum(Xhat * dLdXhat, dim = 1, keepdims = True)/M
+            grad_input /= torch.sqrt(sigma2+ctx.eps)
+        else:
+            grad_input = None
         
-        grad_beta  = torch.sum(Xhat * grad_output, dim = 0, keepdim=True)
-
-        grad_gamma = torch.sum(grad_output, dim = 0, keepdim=True)
-        
-        dXhatdx = grad_output * gamma
-        
-        grad_input = 1/(M * torch.sqrt(sigma2 + ctx.eps)) * \
-            (M * dXhatdx - torch.sum(dXhatdx, dim = 1, keepdim = True) - \
-             Xhat * torch.sum((dXhatdx * Xhat), dim = 1, keepdim = True))
-        print(grad_input.shape)
-
         
         # return gradients of the three tensor inputs and None for the constant eps
         return grad_input, grad_gamma, grad_beta, None
