@@ -9,7 +9,6 @@ from __future__ import print_function
 import argparse
 import numpy as np
 import os
-from convnet_pytorch import ConvNet
 import cifar10_utils
 
 import time
@@ -20,9 +19,9 @@ import torchvision
 from torchvision import models
 
 # Default constants
-LEARNING_RATE_DEFAULT = 1e-4
-BATCH_SIZE_DEFAULT = 32
-MAX_STEPS_DEFAULT = 5000
+LEARNING_RATE_DEFAULT = 1e-1
+BATCH_SIZE_DEFAULT = 64
+MAX_STEPS_DEFAULT = 46875
 EVAL_FREQ_DEFAULT = 500
 
 # Directory in which cifar data is saved
@@ -117,10 +116,10 @@ def train():
     # Loss function and optimizer definition
     loss_function = nn.CrossEntropyLoss()
     
-    optimizer = torch.optim.Adam(model.parameters(), lr = FLAGS.learning_rate, 
-                                 weight_decay=1e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr = FLAGS.learning_rate, 
+                                momentum=0.9, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, 
-                                                     milestones=[2500, 3750], 
+                                                     milestones=[int(0.5*FLAGS.max_steps), int(0.75*FLAGS.max_steps)], 
                                                      gamma=0.1)
     
     # List for loss curve

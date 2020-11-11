@@ -21,6 +21,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 BATCH_SIZE_DEFAULT = 32
 MAX_STEPS_DEFAULT = 5000
 EVAL_FREQ_DEFAULT = 500
+OPTIMIZER_DEFAULT = 'ADAM'
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
@@ -108,7 +109,12 @@ def train():
     # Loss function and optimizer definition
     loss_function = nn.CrossEntropyLoss()
     
-    optimizer = torch.optim.Adam(model.parameters(), lr = FLAGS.learning_rate)
+    if FLAGS.optimizer == 'ADAM':
+        optimizer = torch.optim.Adam(model.parameters(), lr = FLAGS.learning_rate)
+    elif FLAGS.optimizer == 'SGD':
+        optimizer = torch.optim.SGD(model.parameters(), lr = FLAGS.learning_rate)
+    else:
+        raise ValueError('Please use either Adam or SGD as optimizer.')
     
     # List for loss curve
     train_loss = []
