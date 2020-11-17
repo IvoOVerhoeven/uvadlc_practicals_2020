@@ -109,12 +109,14 @@ def train():
     # Loss function and optimizer definition
     loss_function = nn.CrossEntropyLoss()
     
-    if FLAGS.optimizer == 'ADAM':
-        optimizer = torch.optim.Adam(model.parameters(), lr = FLAGS.learning_rate)
-    elif FLAGS.optimizer == 'SGD':
-        optimizer = torch.optim.SGD(model.parameters(), lr = FLAGS.learning_rate)
-    else:
-        raise ValueError('Please use either Adam or SGD as optimizer.')
+    #if FLAGS.optimizer == 'ADAM':
+    #    optimizer = torch.optim.Adam(model.parameters(), lr = FLAGS.learning_rate)
+    #elif FLAGS.optimizer == 'SGD':
+    #    optimizer = torch.optim.SGD(model.parameters(), lr = FLAGS.learning_rate)
+    #else:
+    #    raise ValueError('Please use either Adam or SGD as optimizer.')
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr = FLAGS.learning_rate)
     
     # List for loss curve
     train_loss = []
@@ -171,15 +173,15 @@ def train():
                 test_loss[-1][1], test_loss[-1][1] - past_loss ))
             past_loss = test_loss[-1][1]
             
-            if test_ACC[-1][1] > best_test_ACC:
-                torch.save(model.state_dict(), 
-                           os.path.join(FLAGS.model_dir + '/Convnet_pytorch_v3'))
+            #if test_ACC[-1][1] > best_test_ACC:
+            #    torch.save(model.state_dict(), 
+            #               os.path.join(FLAGS.model_dir + '/Convnet_pytorch_v3'))
             
             model.train()
         
-    with open(os.path.join(FLAGS.model_dir + '/Convnet_pytorch_losses_v3'), 'wb') as file:
-        np.savez(file, train_loss, test_loss, test_ACC)
-        file.close()
+    #with open(os.path.join(FLAGS.model_dir + '/Convnet_pytorch_losses_v3'), 'wb') as file:
+    #    np.savez(file, train_loss, test_loss, test_ACC)
+    #    file.close()
 
 
 def print_flags():

@@ -9,7 +9,6 @@ from __future__ import print_function
 import argparse
 import numpy as np
 import os
-import cifar10_utils
 
 import time
 import torch
@@ -19,16 +18,16 @@ import torchvision
 from torchvision import models
 
 # Default constants
-LEARNING_RATE_DEFAULT = 1e-1
+LEARNING_RATE_DEFAULT = 1e-3
 BATCH_SIZE_DEFAULT = 64
-MAX_STEPS_DEFAULT = 46875
+MAX_STEPS_DEFAULT = 5000
 EVAL_FREQ_DEFAULT = 500
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
 
 # Directory in which the models are saved
-MODEL_DIR_DEFAULT = './cifar10/models' 
+MODEL_DIR_DEFAULT = '/content/drive/My Drive/UvA/Deep Learning'
 
 FLAGS = None
 
@@ -107,20 +106,23 @@ def train():
     for module in model.modules():
         module.requires_grad = False
     
+    #model.features.denseblock4.requires_grad = True
+    #model.features.norm5.requires_grad = True
     model.classifier.requires_grad = True
     model = model.to(device)
     
     # Data sets
-    cifar10 = cifar10_utils.get_cifar10(FLAGS.data_dir)
+    cifar10 = get_cifar10(FLAGS.data_dir)
     
     # Loss function and optimizer definition
     loss_function = nn.CrossEntropyLoss()
     
-    optimizer = torch.optim.SGD(model.parameters(), lr = FLAGS.learning_rate, 
-                                momentum=0.9, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, 
-                                                     milestones=[int(0.5*FLAGS.max_steps), int(0.75*FLAGS.max_steps)], 
-                                                     gamma=0.1)
+    #optimizer = torch.optim.SGD(model.parameters(), lr = FLAGS.learning_rate, 
+    #                            momentum=0.9, weight_decay=1e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr = FLAGS.learning_rate)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[int(0.5*FLAGS.max_steps), int(0.75*FLAGS.max_steps)], gamma=0.1)
+    #lamb = lambda batch: 0.75 ** (batch/FLAGS.max_steps)
+    #scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lamb)
     
     # List for loss curve
     train_loss = []
@@ -174,12 +176,16 @@ def train():
             if batch == 0: past_loss = -np.inf
             print('{:11}|{:>11.2f}|{:>10.2f}%|{:>11.2e}|{:>+11.2e}'.format(
                 batch, (time.time()-t0)/60, test_ACC[-1][1] * 100,
-                test_loss[-1][1], test_loss[-1][1] - past_loss ))
+                test_loss[-1][1], test_loss[-1][1] - past_loss ), end = '')
             past_loss = test_loss[-1][1]
             
             if test_ACC[-1][1] > best_test_ACC:
                 torch.save(model.state_dict(), 
                            os.path.join(FLAGS.model_dir + '/Densenet121_pytorch'))
+                print('    | Max Acc |')
+                best_test_ACC = test_ACC[-1][1]
+            else:
+                print()
                 
         scheduler.step()
         

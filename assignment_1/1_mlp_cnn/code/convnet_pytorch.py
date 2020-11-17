@@ -25,9 +25,6 @@ class ConvNet(nn.Module):
           n_channels: number of input channels
           n_classes: number of classes of the classification problem
           
-        
-        TODO:
-        Implement initialization of the network.
         """
         
         super().__init__()

@@ -99,24 +99,19 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
           eps: small float added to the variance for stability
         Returns:
           out: layer-normalized tensor
-    
-        TODO:
-          Implement the forward pass of layer normalization
-          Store constant non-tensor objects via ctx.constant=myconstant
-          Store tensors which you need in the backward pass via ctx.save_for_backward(tensor1, tensor2, ...)
-          Intermediate results can be decided to be either recomputed in the backward pass or to be stored
-          for the backward pass. Do not store tensors which are unnecessary for the backward pass to save memory!
-          For the case that you make use of torch.var be aware that the flag unbiased=False should be set.
+          
         """
-        
+                
         mu     = torch.mean(input, dim = 1, keepdim=True)
         sigma2 = torch.var(input, dim = 1, keepdim=True, unbiased=False)
-        Xhat   = (input - mu) / torch.sqrt(sigma2 + eps)
+        # This precomputes the scaling factor for the backward pass, avoiding
+        # needing to store the sigma2 AND recomputing
+        sigmaE = torch.sqrt(sigma2 + eps)
+        Xhat   = (input - mu) / sigmaE
 
         Y = gamma * Xhat + beta
         
-        ctx.save_for_backward(gamma, beta, Xhat, sigma2)
-        ctx.eps = eps
+        ctx.save_for_backward(gamma, beta, Xhat, sigmaE)
         
         return Y
     
@@ -139,13 +134,8 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
     
         # Retrieve the stored tensors and compute needed quantities   
         # Now in order of derivations
-        gamma, beta, Xhat, sigma2 = ctx.saved_tensors
-                
-        S, M = Xhat.shape
-        dLdXhat = grad_output * gamma
-        
-        grad_input, grad_gamma, grad_beta =  None, None, None
-        
+        gamma, beta, Xhat, sigmaE = ctx.saved_tensors
+                                
         # Gradient w.r.t. gamma
         if ctx.needs_input_grad[0] == True:
             grad_gamma = torch.sum(Xhat * grad_output, dim = 0, keepdims = True)
@@ -157,13 +147,18 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
             grad_beta = torch.sum(grad_output, dim = 0, keepdims = True)
         else:
             grad_beta = None
-        
+                    
         # Gradient w.r.t. input
         if ctx.needs_input_grad[2] == True:
+            # Some intermediate results
+            S, M = Xhat.shape
+            dLdXhat = grad_output * gamma
+            
+            # Constructing the input gradient 
             grad_input  = dLdXhat
             grad_input -= torch.sum(dLdXhat, dim = 1, keepdims = True)/M
             grad_input -= Xhat*torch.sum(Xhat * dLdXhat, dim = 1, keepdims = True)/M
-            grad_input /= torch.sqrt(sigma2+ctx.eps)
+            grad_input /= sigmaE
         else:
             grad_input = None
         
@@ -190,10 +185,7 @@ class CustomLayerNormManualModule(nn.Module):
         Args:
           n_neurons: int specifying the number of neurons
           eps: small float to be added to the variance for stability
-        
-        TODO:
-          Save parameters for the number of neurons and eps.
-          Initialize parameters gamma and beta via nn.Parameter
+
         """
         super(CustomLayerNormManualModule, self).__init__()
         
@@ -214,12 +206,10 @@ class CustomLayerNormManualModule(nn.Module):
         Returns:
           out: layer-normalized tensor
         
-        TODO:
-          Check for the correctness of the shape of the input tensor.
-          Instantiate a CustomLayerNormManualFunction.
-          Call it via its .apply() method.
         """
-        
+        if input.shape[1] != self.n_neurons:
+            raise ValueError('Input of wrong shape. Expected {:d} for layersize, not {:d}'.format(self.n_neurons, input.shape[1]))
+            
         LN = CustomLayerNormManualFunction()
         out = CustomLayerNormManualFunction.apply(input, self.gamma, self.beta, self.eps)
         

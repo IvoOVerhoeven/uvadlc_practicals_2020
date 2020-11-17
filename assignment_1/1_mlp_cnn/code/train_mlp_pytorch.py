@@ -168,12 +168,15 @@ def train():
             if batch == 0: past_loss = -np.inf
             print('{:11}|{:>11.2f}|{:>10.2f}%|{:>11.2e}|{:>+11.2e}'.format(
                 batch, (time.time()-t0)/60, eval_ACC * 100,
-                eval_loss, eval_loss - past_loss ))
+                eval_loss, eval_loss - past_loss ), end='')
             past_loss = eval_loss
             
             if eval_ACC > best_test_ACC:
+                print('    | Max Acc |')
                 torch.save(mlp.state_dict(), 
                            os.path.join(FLAGS.model_dir + '/MLP_pytorch'))
+                best_test_ACC = eval_ACC
+            else: print()
         
     with open(os.path.join(FLAGS.model_dir + '/MLP_pytorch_losses'), 'wb') as file:
         np.savez(file, train_loss, test_loss, test_ACC)

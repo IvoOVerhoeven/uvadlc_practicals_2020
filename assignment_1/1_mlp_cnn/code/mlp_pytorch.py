@@ -48,7 +48,7 @@ class MLP(nn.Module):
             nn.init.normal_(self.layers[-1].weight, 
                             mean = 0.0, std =  0.0001)
             nn.init.constant_(self.layers[-1].bias, 0)
-            
+                        
             # Add activations. Last layer is special
             if l == len(dims)-1: 
                 # DO NOT ADD SOFTMAX, loss function does this already...

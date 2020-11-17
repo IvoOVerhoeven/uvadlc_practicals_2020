@@ -60,10 +60,6 @@ class LinearModule(object):
           dout: gradients of the previous module
         Returns:
           dx: gradients with respect to the input of the module
-    
-        TODO:
-        Implement backward pass of the module. Store gradient of the loss with respect to
-        layer parameters in self.grads['weight'] and self.grads['bias'].
         """
         
         self.grads['weight'] = dout.T @ self.x
@@ -182,6 +178,8 @@ class ELUModule(object):
           dx: gradients with respect to the input of the module
         """
         
+        # The +1 was needed for the gradient to offset the -1 in the forward
+        # pass
         dydx = np.where(self.out > 0, 1, self.out+1)
         dx = np.multiply(dydx, dout)
         

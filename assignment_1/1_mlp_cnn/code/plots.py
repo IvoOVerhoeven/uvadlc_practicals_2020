@@ -51,9 +51,15 @@ fig1.show()
 fig2 = loss_plots('./cifar10/models/MLP_pytorch_losses', 'Pytorch MLP - Default')
 fig2.show()
 
-fig3 = loss_plots('./cifar10/models/Convnet_pytorch_losses_v3', 'Pytorch Convnet')
+fig3 = loss_plots('./cifar10/models/MLP_pytorch_losses_acc52',
+                  'Pytorch MLP - Tuned Hyperparameters')
 fig3.show()
 
-fig4 = loss_plots('./cifar10/models/Densenet121_pytorch_losses',
-                  'Densenet121 Finetuned')
+fig4 = loss_plots('./cifar10/models/Convnet_pytorch_losses_v3', 'Pytorch Convnet')
 fig4.show()
+
+fig5 = loss_plots('./cifar10/models/Densenet121_pytorch_losses',
+                  'Densenet121 Finetuned')
+fig5.show()
+
+np.max(np.load('./cifar10/models/Convnet_pytorch_losses_v2')['arr_2'], axis = 0)

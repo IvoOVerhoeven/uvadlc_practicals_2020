@@ -30,8 +30,6 @@ class MLP(object):
                      This number is required in order to specify the
                      output dimensions of the MLP
 
-        TODO:
-        Implement initialization of the network.
         """
 
         dims = [n_inputs] + n_hidden + [n_classes]
@@ -57,8 +55,6 @@ class MLP(object):
         Returns:
           out: outputs of the network
 
-        TODO:
-        Implement forward pass of the network.
         """
 
         out = x.copy()
@@ -74,8 +70,6 @@ class MLP(object):
         Args:
           dout: gradients of the loss
 
-        TODO:
-        Implement backward pass of the network.
         """
         
         dy = dout.copy()

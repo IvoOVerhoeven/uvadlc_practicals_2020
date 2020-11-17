@@ -1,59 +1,24 @@
 import numpy as np
-from custom_layernorm import *
-import torch
-from torch import nn
 
-gamma = nn.Parameter(torch.ones(100, dtype = torch.float32))
-beta = nn.Parameter(torch.ones(100, dtype = torch.float32))
-eps = 1e-8
+# A numpy array with values between 0 and 5, with 1000 rows and 100 columns
+arr = np.random.randint(0, 5, (1000,100))
 
-X = 2 * torch.rand((20, 100)) + 10
-dldy = torch.rand((20, 100))
+# Column means. THIS CALCULATES ALONG THE ROWS, HENCE AXIS=0
+col_means = np.mean(arr, axis=0)
 
-mu     = torch.mean(X, dim = 1, keepdim=True)
-sigma2 = torch.var(X, dim = 1, keepdim=True)
-Xhat = (X - mu) / torch.sqrt(sigma2 + eps)
+# Check that is has one value for each column: 100
+assert col_means.shape == (100,)
 
-dldgamma = torch.sum((Xhat * dldy), dim = 1, keepdim=True)
-dldbeta  = torch.sum(dldy, dim = 1, keepdim=True)
+# Gives two arrays: the rows, and the columsn that match the condition.
+# Take the second, find the corresponding means, and set the 0 values to this
+arr[arr == 0] = col_means[np.where(arr == 0)[1]]
 
-n_batch = 8
-n_neurons = 128
-# create random tensor with variance 2 and mean 3
-x = 2 * torch.randn(n_batch, n_neurons, requires_grad=True) + 10
+# Column means. THIS CALCULATES ALONG THE ROWS, HENCE AXIS=0
+col_means = np.mean(arr, axis=0)
+col_stds = np.std(arr, axis=0)
 
-input = x.double()
-gamma = torch.sqrt(10 * torch.arange(n_neurons, dtype=torch.float64, requires_grad=True))
-beta = 100 * torch.arange(n_neurons, dtype=torch.float64, requires_grad=True)
-bn_manual_fct = CustomLayerNormManualFunction(n_neurons)
-y_manual_fct = bn_manual_fct.apply(input, gamma, beta)
+arr = (arr - col_means[None,:]) / col_stds[None,:]
 
-bn_manual_fct.grad
-
-
-
-torch.mean((y_manual_fct - beta)/gamma)
-
-import torchvision
-from torchvision import models
-import cifar10_utils
-
-model = models.densenet121(pretrained=True, memory_efficient=True)
-
-model.classifier.reset_parameters()
-
-model.classifier = nn.Linear(in_features=1024, out_features=10, bias=True)
-
-for module in model.modules():
-    module.requires_grad = False
-
-model.classifier.requires_grad = True
-model = model.to(device)
-
-cifar10 = cifar10_utils.get_cifar10('./cifar10/cifar-10-batches-py')
-X, y = cifar10['train'].next_batch(64)
-X = torch.tensor(X)
-
-X[0]
-
-torch.mean(X, dim = (0,2,3))
+# Check that everything is close to 0 mean and 1 std
+assert np.allclose(np.mean(arr, axis=0), 0)
+assert np.allclose(np.std(arr, axis=0),  1)
