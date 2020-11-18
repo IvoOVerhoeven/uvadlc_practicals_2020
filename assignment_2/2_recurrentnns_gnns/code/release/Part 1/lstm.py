@@ -79,7 +79,7 @@ class LSTMCell(nn.Module):
         #######################
                 
         self.params = nn.ParameterDict({
-            #  Parameters for input modulation gate
+            # Parameters for input modulation gate
             'modulation_x': nn.Parameter(torch.empty((input_dim, hidden_dim), dtype=torch.float, device=device)),
             'modulation_h': nn.Parameter(torch.empty((hidden_dim,hidden_dim), dtype=torch.float, device=device)),
             'modulation_bias': nn.Parameter(torch.empty((hidden_dim), dtype=torch.float, device=device)),
