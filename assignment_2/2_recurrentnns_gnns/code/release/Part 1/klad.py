@@ -3,9 +3,39 @@ import torch
 import torch.nn as nn
 
 from datasets import RandomCombinationsDataset
-from lstm import LSTM
+from lstm import LSTM, LSTMCell
 from bi_lstm import biLSTM
 from torch.utils.data import DataLoader
+
+dataset = RandomCombinationsDataset(5)
+data_loader = DataLoader(dataset, 256, num_workers=1, drop_last=True)
+data_loader = iter(data_loader)
+X, y = next(data_loader)
+
+Embedding = nn.Embedding(num_embeddings=5, embedding_dim=10)
+for layer in Embedding.parameters(): layer.requires_grad = False  
+
+lstm_cell = LSTMCell(10, 128, 5, 256, 'cpu')
+
+lstm = LSTM(5, 10, 128, 5, 256, 'cpu')
+lstm(X)
+
+X.shape
+
+input = Embedding(X.long())
+input.shape
+(input[:, 0] @ lstm.LSTM_cell.params['input_x']).shape
+
+(lstm.LSTM_cell.h @ lstm.LSTM_cell.params['modulation_h']).shape
+lstm(X)
+
+(Embedding(X.long())[:, 0:1] @ lstm_cell.params['input_x']).shape
+(lstm_cell.h @ lstm_cell.params['input_h']).shape
+lstm_cell.h.shape
+
+lstm_cell.params['input_x'].shape
+
+Embedding
 
 ### Variable Parameters
 models = ['LSTM', 'biLSTM']
@@ -36,14 +66,14 @@ for var_par in var_pars:
     model = var_par[0]
     seq_length = int(var_par[1])
     seed = int(var_par[2])
-    num_classes = seq_length+1
+    num_classes = seq_length
     
     ##########################################################################
     ### Experiment Loop ######################################################
     ##########################################################################
     torch.manual_seed(seed)
 
-    dataset = RandomCombinationsDataset(seq_length+1)
+    dataset = RandomCombinationsDataset(seq_length)
     dataloader = iter(DataLoader(dataset, 128, drop_last=True))
     
     losses = []
@@ -86,4 +116,16 @@ for var_par in var_pars:
         loss.backward()
         optimizer.step()
     
-    np.savez(str('./models/'+experiment_name), [losses, accurs])    
+    #np.savez(str('./models/'+experiment_name), [losses, accurs])    
+    
+
+from bi_lstm import biLSTM
+from lstm import LSTM
+    
+dataset = RandomCombinationsDataset(6)
+dataloader = iter(DataLoader(dataset, 128, drop_last=True))
+
+X, y = next(dataloader)
+
+ANN = biLSTM(6, 1, 128, 6, 128, torch.device('cpu'))
+ANN(X)

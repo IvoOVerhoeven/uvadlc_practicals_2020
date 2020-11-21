@@ -44,9 +44,15 @@ import numpy as np
 
 
 def train(config):
-    np.random.seed(0)
-    torch.manual_seed(0)
+    np.random.seed(config.seed)
+    torch.manual_seed(config.seed)
+    
+    experiment_name = str(config.model_type) + '-' \
+                       + str(config.input_length) + '-' + str(config.seed)
+    print('Experiment:{:}'.format(experiment_name))
 
+    losses = []
+    accurs = []
 
     # Initialize the device which to run the model on
     device = torch.device(config.device)
@@ -118,11 +124,13 @@ def train(config):
         ).to(device)
 
     # Setup the loss and optimizer
-    loss_function = torch.nn.NLLLoss()
+    loss_function = torch.nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 
     for step, (batch_inputs, batch_targets) in enumerate(data_loader):
-
+        
+        model.train()
+        
         # Only for time measurement of step through network
         t1 = time.time()
 
@@ -137,7 +145,7 @@ def train(config):
         log_probs = model(batch_inputs)
 
         # Compute the loss, gradients and update network parameters
-        loss = loss_function(log_probs, batch_targets)
+        loss = loss_function(log_probs, batch_targets.long())
         loss.backward()
 
         #######################################################################
@@ -152,17 +160,20 @@ def train(config):
         predictions = torch.argmax(log_probs, dim=1)
         correct = (predictions == batch_targets).sum().item()
         accuracy = correct / log_probs.size(0)
+        
+        losses.append(loss)
+        accurs.append(accuracy)
 
         # print(predictions[0, ...], batch_targets[0, ...])
 
         # Just for time measurement
         t2 = time.time()
-        examples_per_second = config.batch_size/float(t2-t1)
+        examples_per_second = config.batch_size/float(t2-t1+1e-8)
 
-        if step % 60 == 0:
+        if step % config.verbosity == 0 or step == config.train_steps:
 
             print("[{}] Train Step {:04d}/{:04d}, Batch Size = {}, \
-                   Examples/Sec = {:.2f}, "
+                   Examples/Sec = {:8.2f}, "
                   "Accuracy = {:.2f}, Loss = {:.3f}".format(
                     datetime.now().strftime("%Y-%m-%d %H:%M"), step,
                     config.train_steps, config.batch_size, examples_per_second,
@@ -173,8 +184,12 @@ def train(config):
         if step == config.train_steps:
             # If you receive a PyTorch data-loader error, check this bug report
             # https://github.com/pytorch/pytorch/pull/9655
+            
+            np.savez(str(config.checkpoint_path+experiment_name), 
+                     [losses, accurs])
+            
             break
-
+    
     print('Done training.')
     ###########################################################################
     ###########################################################################
@@ -186,7 +201,11 @@ if __name__ == "__main__":
 
     # Parse training configuration
     parser = argparse.ArgumentParser()
-
+    
+    # seed
+    parser.add_argument('--seed', type=str, default=42,
+                        help='Random seed for reproducibility/')
+    
     # dataset
     parser.add_argument('--dataset', type=str, default='randomcomb',
                         choices=['randomcomb', 'bss', 'bipalindrome'],
@@ -195,21 +214,21 @@ if __name__ == "__main__":
     parser.add_argument('--model_type', type=str, default='biLSTM',
                         choices=['LSTM', 'biLSTM', 'GRU', 'peepLSTM'],
                         help='Model type: LSTM, biLSTM, GRU or peepLSTM')
-    parser.add_argument('--input_length', type=int, default=6,
+    parser.add_argument('--input_length', type=int, default=25,
                         help='Length of an input sequence')
     parser.add_argument('--input_dim', type=int, default=1,
                         help='Dimensionality of input sequence')
     parser.add_argument('--num_classes', type=int, default=1,
                         help='Dimensionality of output sequence')
-    parser.add_argument('--num_hidden', type=int, default=256,
+    parser.add_argument('--num_hidden', type=int, default=128,
                         help='Number of hidden units in the model')
 
     # Training params
-    parser.add_argument('--batch_size', type=int, default=256,
+    parser.add_argument('--batch_size', type=int, default=128,
                         help='Number of examples to process in a batch')
     parser.add_argument('--learning_rate', type=float, default=0.001,
                         help='Learning rate')
-    parser.add_argument('--train_steps', type=int, default=3000,
+    parser.add_argument('--train_steps', type=int, default=2000,
                         help='Number of training steps')
     parser.add_argument('--max_norm', type=float, default=10.0)
 
@@ -222,6 +241,11 @@ if __name__ == "__main__":
                         help='Log device placement for debugging')
     parser.add_argument('--summary_path', type=str, default="./summaries/",
                         help='Output path for summaries')
+
+    parser.add_argument('--checkpoint_path', type=str, default="./models/",
+                    help='Output path for models, losses, etc.')
+    parser.add_argument('--verbosity', type=str, default=200,
+                    help='Print progress every /verbosity/ steps')
 
     config = parser.parse_args()
 

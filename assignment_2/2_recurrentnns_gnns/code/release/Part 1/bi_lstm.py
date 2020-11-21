@@ -22,12 +22,17 @@ class biLSTM(nn.Module):
         # PUT YOUR CODE HERE  #
         #######################
         
-        self.seq_length = seq_length
+        self.seq_length = seq_length-1
+        self.embedding_dims = 2*seq_length
         
-        self.LSTM_forward = LSTMCell(input_dim, hidden_dim, num_classes,
+        self.Embedding = nn.Embedding(num_embeddings=seq_length, 
+                                      embedding_dim=self.embedding_dims)
+        for layer in self.Embedding.parameters(): layer.requires_grad = False  
+        
+        self.LSTM_forward = LSTMCell(self.embedding_dims, hidden_dim, num_classes,
                                      batch_size, device)
         
-        self.LSTM_backward = LSTMCell(input_dim, hidden_dim, num_classes,
+        self.LSTM_backward = LSTMCell(self.embedding_dims, hidden_dim, num_classes,
                                       batch_size, device)
         
         self.params = nn.ParameterDict({
@@ -57,14 +62,16 @@ class biLSTM(nn.Module):
         # PUT YOUR CODE HERE  #
         #######################
         
+        embedded_x = self.Embedding(x.long())
+        
         for t in range(self.seq_length):
-            t_r = self.seq_length - t - 1
+            t_r = (self.seq_length) - t - 1
             if t == 0:
-                self.LSTM_forward(x[:, t:t+1], start = True)
-                self.LSTM_backward(x[:, t_r:t_r+1], start = True)
+                self.LSTM_forward(embedded_x[:,t], start = True)
+                self.LSTM_backward(embedded_x[:,t_r], start = True)
             else:
-                self.LSTM_forward(x[:, t:t+1])
-                self.LSTM_backward(x[:, t_r:t_r+1])
+                self.LSTM_forward(embedded_x[:,t])
+                self.LSTM_backward(embedded_x[:,t_r])
                 
         H = torch.cat((self.LSTM_forward.h, self.LSTM_backward.h), 1)
         
