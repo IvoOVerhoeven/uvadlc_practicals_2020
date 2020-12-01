@@ -1,19 +1,2 @@
-
-.vscode/settings.json
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/klad.py
-assignment_1/1_mlp_cnn/code/plots.py
-assignment_1/1_mlp_cnn/code/plots.py
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/klad.py
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/figures/biLSTM-10.pdf
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/figures/biLSTM-15.pdf
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/figures/biLSTM-5.pdf
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/figures/LSTM-10.pdf
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/figures/LSTM-15.pdf
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/figures/LSTM-5.pdf
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/figures/LSTM-6.pdf
-*.npz
-assignment_2/2_recurrentnns_gnns/code/release/Part 1/plots.py
-assignment_2/2_recurrentnns_gnns/code/release/Part 2/klad2.py
-assignment_2/2_recurrentnns_gnns/code/release/Part 2/klad.py
-assignment_2/2_recurrentnns_gnns/code/release/Part 2/model2.py
-assignment_2/2_recurrentnns_gnns/code/release/Part 2/train2.py
+.idea
+assignment_3/3_generative/data
