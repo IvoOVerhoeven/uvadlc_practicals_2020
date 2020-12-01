@@ -20,15 +20,15 @@ class LSTM(nn.Module):
         # PUT YOUR CODE HERE  #
         #######################
         
-        self.seq_length = seq_length - 1
-        self.embedding_dims = 2*seq_length
+        self.seq_length = seq_length-1
+        self.embedding_dims = input_dim
         
         self.Embedding = nn.Embedding(num_embeddings=seq_length, 
                                       embedding_dim=self.embedding_dims)
-        for layer in self.Embedding.parameters(): layer.requires_grad = False        
+        for layer in self.Embedding.parameters(): layer.requires_grad = False         
         
         self.LSTM_cell = LSTMCell(self.embedding_dims, hidden_dim, num_classes, 
-                                   batch_size, device)
+                                  batch_size, device)
         
         self.params = nn.ParameterDict({
                 # Parameters for output (h->p->y)
@@ -47,6 +47,8 @@ class LSTM(nn.Module):
             else:
                 # Bias gets filled with 0 
                 nn.init.constant_(weight_matrix, 0)
+                
+        self.to(device)
                       
         ########################
         # END OF YOUR CODE    #
@@ -56,16 +58,15 @@ class LSTM(nn.Module):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        
         embedded_x = self.Embedding(x.long())
-        
+
         for t in range(self.seq_length):
             if t == 0:
-                h,c = self.LSTM_cell(embedded_x[:,t])
+                self.LSTM_cell(embedded_x[:,t], start = True)
             else:
-                h,c = self.LSTM_cell(embedded_x[:,t], (h, c))
-                            
-        predict  = h @ self.params['predict_h']
+                self.LSTM_cell(embedded_x[:,t])
+                
+        predict  = self.LSTM_cell.h @ self.params['predict_h']
         predict += self.params['predict_bias']
 
         return predict
@@ -84,11 +85,7 @@ class LSTMCell(nn.Module):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        
-        self.batch_size = batch_size
-        self.hidden_dim = hidden_dim
-        self.device = device
-           
+                
         self.params = nn.ParameterDict({
             # Parameters for input modulation gate
             'modulation_x': nn.Parameter(torch.empty((input_dim, hidden_dim), dtype=torch.float, device=device)),
@@ -119,48 +116,45 @@ class LSTMCell(nn.Module):
                 # Bias gets filled with 0 
                 nn.init.constant_(weight_matrix, 0)
         
+        self.h = torch.zeros((batch_size, hidden_dim), dtype=torch.float, device = device)
+        self.c = torch.zeros((batch_size, hidden_dim), dtype=torch.float, device = device)
+        
         ########################
         # END OF YOUR CODE    #
         #######################
 
-    def forward(self, x, hidden = None):
+    def forward(self, x, start = False):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
 
-        if hidden == None:
+        if start:
             # If start of the sequence, purge the existing h and c values
-            h = torch.zeros((self.batch_size, self.hidden_dim), \
-                                 dtype=torch.float, device = self.device)
-            c = torch.zeros((self.batch_size, self.hidden_dim),
-                                 dtype=torch.float, device = self.device)
-        else:
-            (h,c) = hidden
+            self.h = torch.zeros_like(self.h)
+            self.c = torch.zeros_like(self.h)
         
         g_input  = x @ self.params['modulation_x']
-        g_input += h @ self.params['modulation_h'] 
+        g_input += self.h @ self.params['modulation_h'] 
         g_input += self.params['modulation_bias'][None,:]
         g_out = torch.tanh(g_input)
         
         i_input  = x @ self.params['input_x']
-        i_input += h @ self.params['input_h'] 
+        i_input += self.h @ self.params['input_h'] 
         i_input += self.params['input_bias'][None,:]
         i_out = torch.sigmoid(i_input)
         
         f_input  = x @ self.params['forget_x']
-        f_input += h @ self.params['forget_h'] 
+        f_input += self.h @ self.params['forget_h'] 
         f_input += self.params['forget_bias'][None,:]
         f_out = torch.sigmoid(i_input)
         
         o_input  = x @ self.params['output_x']
-        o_input += h @ self.params['output_h'] 
+        o_input += self.h @ self.params['output_h'] 
         o_input += self.params['output_bias'][None,:]
         o_out = torch.sigmoid(i_input)
         
-        c = g_out * i_out + f_out * c
-        h = torch.tanh(c) * o_out
-        
-        return h, c
+        self.c = g_out * i_out + f_out * self.c
+        self.h = torch.tanh(self.c) * o_out
         
         ########################
         # END OF YOUR CODE    #

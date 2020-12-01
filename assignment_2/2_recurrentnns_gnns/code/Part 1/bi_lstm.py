@@ -23,7 +23,7 @@ class biLSTM(nn.Module):
         #######################
         
         self.seq_length = seq_length-1
-        self.embedding_dims = 2*seq_length
+        self.embedding_dims = input_dim
         
         self.Embedding = nn.Embedding(num_embeddings=seq_length, 
                                       embedding_dim=self.embedding_dims)
@@ -52,7 +52,8 @@ class biLSTM(nn.Module):
             else:
                 # Bias gets filled with 0 
                 nn.init.constant_(weight_matrix, 0)
-                
+        
+        self.to(device)
         ########################
         # END OF YOUR CODE    #
         #######################

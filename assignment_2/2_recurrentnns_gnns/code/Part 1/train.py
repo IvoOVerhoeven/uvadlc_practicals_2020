@@ -44,11 +44,12 @@ import numpy as np
 
 
 def train(config):
-    np.random.seed(config.seed)
-    torch.manual_seed(config.seed)
+    np.random.seed(int(config.seed))
+    torch.manual_seed(int(config.seed))
     
-    experiment_name = str(config.model_type) + '-' \
-                       + str(config.input_length) + '-' + str(config.seed)
+    experiment_name = str(config.model_type) + '-Seq_length:' \
+                       + str(config.input_length) + '-Input_dim:' + \
+                       str(config.input_dim) + '-Seed:' + str(config.seed)
     print('Experiment:{:}'.format(experiment_name))
 
     losses = []
@@ -65,6 +66,8 @@ def train(config):
         config.num_classes = config.input_length
         dataset = datasets.RandomCombinationsDataset(config.input_length)
         data_loader = DataLoader(dataset, config.batch_size, num_workers=1,
+                                 drop_last=True)
+        test_loader = DataLoader(dataset, config.batch_size, num_workers=1,
                                  drop_last=True)
 
     elif config.dataset == 'bss':
@@ -154,43 +157,78 @@ def train(config):
         torch.nn.utils.clip_grad_norm_(model.parameters(),
                                        max_norm=config.max_norm)
         #######################################################################
-
+    
         optimizer.step()
-
-        predictions = torch.argmax(log_probs, dim=1)
-        correct = (predictions == batch_targets).sum().item()
-        accuracy = correct / log_probs.size(0)
         
-        losses.append(loss)
-        accurs.append(accuracy)
+        model.eval()
+        
+        test_acc, test_loss = [], []
+        for test_step, (test_inputs, test_targets) in enumerate(test_loader):
+            if test_step >= 40: break
+                    
+            test_inputs  = test_inputs.to(device)     # [batch_size, seq_length,1]
+            test_targets = test_targets.to(device)   # [batch_size]
+            
+            # Forward
+            output = model(test_inputs)
+            
+            out = model(test_inputs)
 
+            # Compute the loss, gradients and update network parameters
+            loss = loss_function(out, batch_targets.long())
+            
+            test_acc.append(torch.mean((torch.argmax(out, 1) == \
+                                   test_targets).float()).item())
+            test_loss.append(loss_function(output, test_targets.long()).item())
+            
+        
+        losses.append([np.mean(test_loss), np.std(test_loss)])
+        accurs.append([np.mean(test_acc), np.std(test_acc)])
+        
         # print(predictions[0, ...], batch_targets[0, ...])
 
         # Just for time measurement
         t2 = time.time()
         examples_per_second = config.batch_size/float(t2-t1+1e-8)
 
-        if step % config.verbosity == 0 or step == config.train_steps:
+        if step == 0 or step % config.verbosity == 0 or step == config.train_steps:
 
             print("[{}] Train Step {:04d}/{:04d}, Batch Size = {}, \
                    Examples/Sec = {:8.2f}, "
                   "Accuracy = {:.2f}, Loss = {:.3f}".format(
                     datetime.now().strftime("%Y-%m-%d %H:%M"), step,
                     config.train_steps, config.batch_size, examples_per_second,
-                    accuracy, loss
+                    accurs[-1][0], losses[-1][0]
+                    ))
+        
+        if np.mean(np.array(accurs)[-3:,0]) == 1:
+            np.savez(str(config.checkpoint_path+experiment_name),
+                     loss = losses, acc = accurs)
+            
+            print("[{}] Train Step {:04d}/{:04d}, Batch Size = {}, \
+                   Examples/Sec = {:8.2f}, "
+                  "Accuracy = {:.2f}, Loss = {:.3f}".format(
+                    datetime.now().strftime("%Y-%m-%d %H:%M"), step,
+                    config.train_steps, config.batch_size, examples_per_second,
+                    accurs[-1][0], losses[-1][0]
                     ))
 
+            print('Early stop. Accuracy perfect over last 3 batches, \
+                  likely converged.')
+            break
+        
         # Check if training is finished
         if step == config.train_steps:
             # If you receive a PyTorch data-loader error, check this bug report
             # https://github.com/pytorch/pytorch/pull/9655
             
-            np.savez(str(config.checkpoint_path+experiment_name), 
-                     [losses, accurs])
+            np.savez(str(config.checkpoint_path+'/'+experiment_name), 
+                     loss=losses, acc=accurs)
             
+            print('Done training.')
             break
+
     
-    print('Done training.')
     ###########################################################################
     ###########################################################################
 
@@ -214,7 +252,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_type', type=str, default='biLSTM',
                         choices=['LSTM', 'biLSTM', 'GRU', 'peepLSTM'],
                         help='Model type: LSTM, biLSTM, GRU or peepLSTM')
-    parser.add_argument('--input_length', type=int, default=25,
+    parser.add_argument('--input_length', type=int, default=5,
                         help='Length of an input sequence')
     parser.add_argument('--input_dim', type=int, default=1,
                         help='Dimensionality of input sequence')
@@ -244,7 +282,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--checkpoint_path', type=str, default="./models/",
                     help='Output path for models, losses, etc.')
-    parser.add_argument('--verbosity', type=str, default=200,
+    parser.add_argument('--verbosity', type=str, default=100,
                     help='Print progress every /verbosity/ steps')
 
     config = parser.parse_args()

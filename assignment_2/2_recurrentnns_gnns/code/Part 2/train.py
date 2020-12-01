@@ -46,6 +46,9 @@ def hidden_init(config):
         return hidden
 
 def train(config):
+    np.random.seed(int(config.seed))
+    torch.manual_seed(int(config.seed))
+    
     # Initialize the device which to run the model on
     device = torch.device(config.device)
     print('Using device:', device)
@@ -67,7 +70,7 @@ def train(config):
 
     # Setup the loss and optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), config.learning_rate)
+    optimizer = optim.AdamW(model.parameters(), config.learning_rate)
     
     scheduler = optim.lr_scheduler.StepLR(optimizer,
                                           step_size=config.learning_rate_step,
@@ -77,10 +80,12 @@ def train(config):
     losses = []
     accurs = []
     
-    for step in range(int(config.train_steps)):
+    for step in range(1,int(config.train_steps)+1):
         
         # Only for time measurement of step through network
         t1 = time.time()
+        
+        model.train()
         
         # If data runs out, reinitiate the dataloader
         try:
@@ -102,7 +107,7 @@ def train(config):
         # to implicit via feeding all data at once
         for t in range(config.seq_length):  
             if t == 0:
-                hidden = hidden_init(config)
+                hidden = model.hidden_init()
             
             out, hidden = model(X[t:t+1], hidden)
             loss += criterion(out[0], y[t])
@@ -129,13 +134,13 @@ def train(config):
         t2 = time.time()
         examples_per_second = config.batch_size/float(t2-t1+1e-8)
 
-        if (step + 1) % config.print_every == 0:
+        if step == 1 or step % config.print_every == 0 or step == config.train_steps:
 
-            print("[{}] Train Step {:04d}/{:04d}, Learning rate = {:.2e}, Examples/Sec = {:.2f}, "
-                  "Accuracy = {:.2f}, Loss = {:.3f}".format(
+            print("[{}] Train Step {:04d}/{:04d}, Learning rate = {:.2e}, Examples/Sec = {:>6.2f}, "
+                  "Accuracy = {:05.2f}%, Loss = {:.3f}".format(
                     datetime.now().strftime("%Y-%m-%d %H:%M"), step,
                     int(config.train_steps), scheduler.get_last_lr()[0], 
-                    examples_per_second, batch_acc, batch_loss
+                    examples_per_second, batch_acc*100, batch_loss
                     ))
         
         if  batch_acc > best_acc:
@@ -148,22 +153,30 @@ def train(config):
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': loss,
-            'config':config,
-            'vocab_size': dataset._vocab_size,
-            'ix_to_char': dataset._ix_to_char
+            'config':config
             }, path)
             best_acc = batch_acc
             
-        if (step + 1) % config.sample_every == 0:
+        if step % config.sample_every == 0:
+            model.eval()
             # Generate some sentences by sampling from the model
-            for tau in [None,0.5,1,2]:
+            for length in [10,30,100]:
                 text = model.sample(N_samples=100, 
                                     string_conversion=dataset.convert_to_string,
-                                    tau=None)
+                                    length=length)
                 path  = config.save_path + '/'
                 path += config.txt_file.rsplit('/')[-1][:-4]
-                path += 'samples_'+str(step)+'_'+ \
-                    str(tau)+'.txt'
+                path += '_samples_'+str(step)+'_T-'+str(length)+'.txt'
+                print(path)
+                np.savetxt(path, text, delimiter="", fmt='|%s|', newline='\n') 
+            for tau in [0.5,1,2]:
+                text = model.sample(N_samples=100, 
+                                    string_conversion=dataset.convert_to_string,
+                                    tau=tau)
+                path  = config.save_path + '/'
+                path += config.txt_file.rsplit('/')[-1][:-4]
+                path += '_samples_'+str(step)+'_tau-'+str(tau)+'.txt'
+                print(path)
                 np.savetxt(path, text, delimiter="", fmt='|%s|', newline='\n') 
 
 
@@ -173,7 +186,7 @@ def train(config):
             # https://github.com/pytorch/pytorch/pull/9655
             path  = config.save_path + '/'
             path += config.txt_file.rsplit('/')[-1][:-4]
-            path += '_Train_Losses.npz'
+            path += '_Train_Losses'
             
             np.savez(path, loss=losses, accuracy=accurs)
         
@@ -195,7 +208,7 @@ if __name__ == "__main__":
                         help="Path to a .txt file to train on")
     parser.add_argument('--seq_length', type=int, default=30,
                         help='Length of an input sequence')
-    parser.add_argument('--lstm_num_hidden', type=int, default=128,
+    parser.add_argument('--lstm_num_hidden', type=int, default=1024,
                         help='Number of hidden units in the LSTM')
     parser.add_argument('--lstm_num_layers', type=int, default=2,
                         help='Number of LSTM layers in the model')
@@ -203,28 +216,28 @@ if __name__ == "__main__":
     # Training params
     parser.add_argument('--batch_size', type=int, default=64,
                         help='Number of examples to process in a batch')
-    parser.add_argument('--learning_rate', type=float, default=2e-3,
+    parser.add_argument('--learning_rate', type=float, default=5e-3,
                         help='Learning rate')
 
     # It is not necessary to implement the following three params,
     # but it may help training.
-    parser.add_argument('--learning_rate_decay', type=float, default=0.9,
+    parser.add_argument('--learning_rate_decay', type=float, default=0.955,
                         help='Learning rate decay fraction')
-    parser.add_argument('--learning_rate_step', type=int, default=500,
+    parser.add_argument('--learning_rate_step', type=int, default=75,
                         help='Learning rate step')
-    parser.add_argument('--dropout_keep_prob', type=float, default=0.7,
+    parser.add_argument('--dropout_keep_prob', type=float, default=0.5,
                         help='Dropout keep probability')
 
-    parser.add_argument('--train_steps', type=int, default=5e3,
+    parser.add_argument('--train_steps', type=int, default=7.5e3,
                         help='Number of training steps')
     parser.add_argument('--max_norm', type=float, default=5.0, help='--')
 
     # Misc params
     parser.add_argument('--summary_path', type=str, default="./summaries/",
                         help='Output path for summaries')
-    parser.add_argument('--print_every', type=int, default=50,
+    parser.add_argument('--print_every', type=int, default=75,
                         help='How often to print training progress')
-    parser.add_argument('--sample_every', type=int, default=1000,
+    parser.add_argument('--sample_every', type=int, default=2500,
                         help='How often to sample from the model')
     
 
@@ -234,6 +247,8 @@ if __name__ == "__main__":
                         help='Device to run the model on')
     parser.add_argument('--save_path', type=str, default='./models/',
                         help='Where to save the model to')
+    parser.add_argument('--seed', type=int, default=610,
+                        help='Random seed.')
 
     config = parser.parse_args()
 
