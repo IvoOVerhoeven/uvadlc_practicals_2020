@@ -32,11 +32,27 @@ class MLPEncoder(nn.Module):
             z_dim - Dimensionality of latent vector.
         """
         super().__init__()
-
+        
         # For an intial architecture, you can use a sequence of linear layers and ReLU activations.
         # Feel free to experiment with the architecture yourself, but the one specified here is 
         # sufficient for the assignment.
-        raise NotImplementedError
+        
+        dims = [input_dim] + hidden_dims
+        n_layers = len(hidden_dims)
+        
+        latent_container = [nn.Flatten()]
+        for l in range(n_layers):
+            latent_container.append(nn.Linear(in_features=dims[l], 
+                                              out_features=dims[l+1])
+                                    )
+            latent_container.append(nn.ReLU(True))
+            
+        self.latent = nn.Sequential(*latent_container)
+        self.mean = nn.Linear(in_features=dims[-1], 
+                              out_features=z_dim)
+                                  
+        self.log_std = nn.Linear(in_features=dims[-1],
+                                 out_features=z_dim)
 
     def forward(self, x):
         """
@@ -47,11 +63,12 @@ class MLPEncoder(nn.Module):
             log_std - Tensor of shape [B,z_dim] representing the predicted log standard deviation
                       of the latent distributions.
         """
-
+        
+        latent = self.latent(x)
         # Remark: Make sure to understand why we are predicting the log_std and not std
-        mean = None
-        log_std = None
-        raise NotImplementedError
+        mean = self.mean(latent)
+        log_std = self.log_std(latent)
+
         return mean, log_std
 
 
@@ -69,11 +86,26 @@ class MLPDecoder(nn.Module):
         """
         super().__init__()
         self.output_shape = output_shape
-
+        
         # For an intial architecture, you can use a sequence of linear layers and ReLU activations.
         # Feel free to experiment with the architecture yourself, but the one specified here is 
         # sufficient for the assignment.
-        raise NotImplementedError
+        
+        dims = [z_dim] + hidden_dims
+        n_layers = len(hidden_dims)
+        
+        unlatent_container = [nn.Flatten()]
+        for l in range(n_layers):
+            unlatent_container.append(nn.Linear(in_features=dims[l], 
+                                                out_features=dims[l+1])
+                                    )
+            unlatent_container.append(nn.ReLU(True))
+        
+        unlatent_container.append(nn.Linear(in_features=dims[-1], 
+                                            out_features=np.prod(output_shape))
+                                  )
+        
+        self.decoder = nn.Sequential(*unlatent_container)
 
     def forward(self, z):
         """
@@ -85,8 +117,9 @@ class MLPDecoder(nn.Module):
                 Shape: [B,output_shape[0],output_shape[1],output_shape[2]]
         """
 
-        x = None
-        raise NotImplementedError
+        x = self.decoder(z)
+        x = x.reshape((x.shape[0],*self.output_shape))
+
         return x
 
     @property

@@ -31,9 +31,14 @@ def sample_reparameterize(mean, std):
         z - A sample of the distributions, with gradient support for both mean and std. 
             The tensor should have the same shape as the mean and std input tensors.
     """
+    
+    #u = torch.normal(0, 1, size=mean.size())
+    u = torch.randn_like(mean)
+    if torch.min(std) < 0:
+        z = torch.exp(std) * u + mean
+    else:
+        z = std * u + mean
 
-    z = None
-    raise NotImplementedError
     return z
 
 
@@ -48,9 +53,10 @@ def KLD(mean, log_std):
         KLD - Tensor with one less dimension than mean and log_std (summed over last dimension).
               The values represent the Kullback-Leibler divergence to unit Gaussians.
     """
-
-    KLD = None
-    raise NotImplementedError
+    
+    log_var = 2*log_std
+    KLD = 0.5 * torch.sum(torch.exp(log_var) + mean ** 2 - 1 - log_var, dim=1)
+    
     return KLD
 
 
@@ -63,8 +69,13 @@ def elbo_to_bpd(elbo, img_shape):
     Outputs:
         bpd - The negative log likelihood in bits per dimension for the given image.
     """
-    bpd = None
-    raise NotImplementedError
+    
+    channels = torch.log2(torch.exp(torch.tensor([1.0]))) \
+        / torch.prod(torch.tensor(img_shape[1:]))
+    channels = channels.item()
+    
+    bpd = elbo * channels
+
     return bpd
 
 
@@ -88,8 +99,28 @@ def visualize_manifold(decoder, grid_size=20):
     # - torch.meshgrid might be helpful for creating the grid of values
     # - You can use torchvision's function "make_grid" to combine the grid_size**2 images into a grid
     # - Remember to apply a sigmoid after the decoder
-
-    img_grid = None
-    raise NotImplementedError
-
+    
+    # Compute the desired quantiles
+    d_grid=1/(grid_size+1)
+    ppfs = norm.ppf(torch.arange(0.5/(grid_size+1), 
+                                 (grid_size+0.5)/(grid_size+1), d_grid))
+    ppfs = torch.tensor(ppfs)
+    
+    # Convert the quantiles to a [grid_size**2,2] latent input tensor
+    z1, z2 = torch.meshgrid(ppfs, ppfs)
+    z = torch.stack([z1.reshape(-1), z2.reshape(-1)], dim=1).float()
+    
+    # Decode into images
+    with torch.no_grad():
+        imgs = torch.sigmoid(decoder(z).detach())
+    
+    # Convert to a grid of images
+    img_grid = make_grid(imgs, nrow=grid_size).permute(1,2,0)
+    
+    # To NumPy for saving
+    img_grid = img_grid.mul(255).add_(0.5).clamp_(0, 255)
+    img_grid = img_grid.type(torch.ByteTensor).numpy()
+    
+    #plt.imshow(img_grid)
+    
     return img_grid

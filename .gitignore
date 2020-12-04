@@ -5,3 +5,7 @@ assignment_2/2_recurrentnns_gnns/code/release/Part 2/models/BartlebytheScrivener
 assignment_2/2_recurrentnns_gnns/code/Part 2/assets/book_TeX_calculus_made_easy.tex
 assignment_2/2_recurrentnns_gnns/code/Part 2/models/BartlebytheScrivener_LSTM
 assignment_2/2_recurrentnns_gnns/code/Part 2/models/PyDocTutorials_LSTM
+*.pyc
+*.png
+*.yaml
+*.ckpt

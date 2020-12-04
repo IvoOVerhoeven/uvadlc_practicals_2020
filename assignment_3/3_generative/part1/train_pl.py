@@ -29,6 +29,7 @@ from bmnist import bmnist
 from mlp_encoder_decoder import MLPEncoder, MLPDecoder
 from cnn_encoder_decoder import CNNEncoder, CNNDecoder
 from utils import *
+from PIL import Image
 
 
 class VAE(pl.LightningModule):
@@ -52,6 +53,8 @@ class VAE(pl.LightningModule):
         else:
             self.encoder = CNNEncoder(z_dim=z_dim, num_filters=num_filters)
             self.decoder = CNNDecoder(z_dim=z_dim, num_filters=num_filters)
+            
+        self.z_dim = z_dim
 
     def forward(self, imgs):
         """
@@ -64,12 +67,22 @@ class VAE(pl.LightningModule):
             bpd - The average bits per dimension metric of the batch.
                   This is also the loss we train on. Shape: single scalar
         """
+        mean, log_std = self.encoder(imgs)
+        z = sample_reparameterize(mean, log_std)
+        x_hat = torch.sigmoid(self.decoder(z))
 
-        L_rec = None
-        L_reg = None
-        bpd = None
-        raise NotImplementedError
-        return L_rec, L_reg, bpd
+        L_rec = torch.sum(F.binary_cross_entropy(x_hat, imgs, reduction='none'), 
+                          dim=(1,2,3))
+        L_reg = KLD(mean, log_std)
+        
+        bpd = elbo_to_bpd(L_rec + L_reg, imgs.size())
+        
+        ims_rgb = imgs.mul(255).add_(0.5).clamp_(0, 255)
+        with torch.no_grad():
+            PSNR = 20*torch.log10(255/torch.sqrt(
+                torch.mean((ims_rgb-torch.round(x_hat))**2)))
+
+        return torch.mean(L_rec), torch.mean(L_reg), torch.mean(bpd), PSNR
 
     @torch.no_grad()
     def sample(self, batch_size):
@@ -83,9 +96,10 @@ class VAE(pl.LightningModule):
                      between 0 and 1 from which we obtain "x_samples".
                      Shape: [B,C,H,W]
         """
-        x_mean = None
-        x_samples = None
-        raise NotImplementedError
+        z = torch.normal(0,1, size=(batch_size, self.z_dim), device=self.device)
+        x_mean = torch.sigmoid(self.decoder(z)).detach()
+        x_samples = torch.round(x_mean)
+
         return x_samples, x_mean
 
     def configure_optimizers(self):
@@ -95,31 +109,34 @@ class VAE(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         # Make use of the forward function, and add logging statements
-        L_rec, L_reg, bpd = self.forward(batch[0])
-        self.log("train_reconstruction_loss", L_rec, on_step=False, on_epoch=True)
-        self.log("train_regularization_loss", L_reg, on_step=False, on_epoch=True)
-        self.log("train_ELBO", L_rec + L_reg, on_step=False, on_epoch=True)
-        self.log("train_bpd", bpd, on_step=False, on_epoch=True)
+        L_rec, L_reg, bpd, PSNR = self.forward(batch[0])
+        self.log("train_reconstruction_loss", L_rec, on_step=True, on_epoch=False)
+        self.log("train_regularization_loss", L_reg, on_step=True, on_epoch=False)
+        self.log("train_ELBO", L_rec + L_reg, on_step=True, on_epoch=False)
+        self.log("train_bpd", bpd, on_step=True, on_epoch=False)
+        self.log("Train PSNR", PSNR, on_step=False, on_epoch=True)
 
         return bpd
 
     def validation_step(self, batch, batch_idx):
         # Make use of the forward function, and add logging statements
-        L_rec, L_reg, bpd = self.forward(batch[0])
+        L_rec, L_reg, bpd, PSNR = self.forward(batch[0])
         self.log("val_reconstruction_loss", L_rec)
         self.log("val_regularization_loss", L_reg)
         self.log("val_ELBO", L_rec + L_reg)
         self.log("val_bpd", bpd)
+        self.log("Val PSNR", PSNR)
+        print("ELBO:", (L_rec + L_reg).item(), "BPD:", bpd.item())
 
     def test_step(self, batch, batch_idx):
         # Make use of the forward function, and add logging statements
-        L_rec, L_reg, bpd = self.forward(batch[0])
+        L_rec, L_reg, bpd, _ = self.forward(batch[0])
         self.log("test_bpd", bpd)
 
 
-class GenerateCallback(pl.Callback):
+class GenerateCallback(pl.Callback):    
 
-    def __init__(self, batch_size=64, every_n_epochs=5, save_to_disk=False):
+    def __init__(self, batch_size=64, every_n_epochs=1, save_to_disk=False):
         """
         Inputs:
             batch_size - Number of images to generate
@@ -136,7 +153,9 @@ class GenerateCallback(pl.Callback):
         This function is called after every epoch.
         Call the save_and_sample function every N epochs.
         """
-        if (trainer.current_epoch+1) % self.every_n_epochs == 0:
+        if ((trainer.current_epoch+1) % self.every_n_epochs == 0 or 
+            trainer.current_epoch==0 or 
+            (trainer.current_epoch+1)==trainer.max_epochs):
             self.sample_and_save(trainer, pl_module, trainer.current_epoch+1)
 
     def sample_and_save(self, trainer, pl_module, epoch):
@@ -154,8 +173,22 @@ class GenerateCallback(pl.Callback):
         # - You can access the tensorboard logger via trainer.logger.experiment
         # - Use the torchvision function "make_grid" to create a grid of multiple images
         # - Use the torchvision function "save_image" to save an image grid to disk
-
-        raise NotImplementedError
+        
+        imgs, _ = pl_module.sample(64)
+        
+        if self.save_to_disk:
+            save_image(imgs, trainer.logger.log_dir+'/epoch{:d}.png'.format(epoch),
+                       nrow=8)
+                
+        img_grid = make_grid(imgs, nrow=8)
+        img_grid = img_grid.mul(255).add_(0.5).clamp_(0, 255)#.permute(1, 2, 0)
+        print(imgs.device)
+        img_grid = img_grid.type(torch.ByteTensor).numpy()
+        
+        trainer.logger.experiment.add_image('Generated Digits', 
+                                            img_grid, epoch)
+        
+        return img_grid
 
 
 def train_vae(args):
@@ -170,7 +203,7 @@ def train_vae(args):
                                                    num_workers=args.num_workers)
 
     # Create a PyTorch Lightning trainer with the generation callback
-    gen_callback = GenerateCallback(save_to_disk=True)
+    gen_callback = GenerateCallback(save_to_disk=True, every_n_epochs=5)
     trainer = pl.Trainer(default_root_dir=args.log_dir,
                          checkpoint_callback=ModelCheckpoint(save_weights_only=True, mode="min", monitor="val_bpd"),
                          gpus=1 if torch.cuda.is_available() else 0,
@@ -188,7 +221,7 @@ def train_vae(args):
                 lr=args.lr)
 
     # Training
-    gen_callback.sample_and_save(trainer, model, epoch=0)  # Initial sample
+    #gen_callback.sample_and_save(trainer, model, epoch=0)  # Initial sample
     trainer.fit(model, train_loader, val_loader)
 
     # Testing
@@ -196,13 +229,13 @@ def train_vae(args):
     test_result = trainer.test(model, test_dataloaders=test_loader, verbose=True)
 
     # Manifold generation
-    if args.z_dim == 2:
-        img_grid = visualize_manifold(model.decoder)
-        save_image(img_grid,
-                   os.path.join(trainer.logger.log_dir, 'vae_manifold.png'),
-                   normalize=False)
+    #if args.z_dim == 2:
+    #    img_grid = visualize_manifold(model.decoder)
+    #    save_image(img_grid,
+    #               os.path.join(trainer.logger.log_dir, 'vae_manifold.png'),
+    #               normalize=False)
 
-    return test_result
+    return test_result, trainer
 
 
 if __name__ == '__main__':
@@ -211,10 +244,10 @@ if __name__ == '__main__':
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # Model hyperparameters
-    parser.add_argument('--model', default='MLP', type=str,
+    parser.add_argument('--model', default='CNN', type=str,
                         help='What model to use in the VAE',
                         choices=['MLP', 'CNN'])
-    parser.add_argument('--z_dim', default=20, type=int,
+    parser.add_argument('--z_dim', default=2, type=int,
                         help='Dimensionality of latent space')
     parser.add_argument('--hidden_dims', default=[512], type=int, nargs='+',
                         help='Hidden dimensionalities to use inside the network. To specify multiple, use " " to separate them. Example: "512 256"')
@@ -243,4 +276,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    train_vae(args)
+    test_result, trainer = train_vae(args)
+    print(test_result)
+    
+    # Saving images in the training loop gave a lot of issues with CUDA, 
+    # dtypes, etc.
+    # Here I just do it myself using PIL.
+    
+    model = VAE.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
+    if args.z_dim == 2:
+        img_grid = visualize_manifold(model.decoder, grid_size=32)
+        
+        im = Image.fromarray(img_grid)
+        im.save(os.path.join(trainer.logger.log_dir, 'vae_manifold.png'), 
+                normalize=False)
