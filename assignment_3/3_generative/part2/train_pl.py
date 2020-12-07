@@ -19,11 +19,12 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 from torchvision.utils import make_grid, save_image
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 
-from mnist import mnist
+import mnist
 from models import GeneratorMLP, DiscriminatorMLP
 
 
@@ -47,6 +48,9 @@ class GAN(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
+        self.z_dim = z_dim
+        self.lr =lr
+        
         self.generator = GeneratorMLP(z_dim=z_dim,
                                          hidden_dims=hidden_dims_gen,
                                          dp_rate=dp_rate_gen)
@@ -63,8 +67,9 @@ class GAN(pl.LightningModule):
         Outputs:
             x - Generated images of shape [B,C,H,W]
         """
-        x = None
-        raise NotImplementedError
+        z = torch.normal(0, 1, (batch_size, self.z_dim))
+        x = self.generator(z)
+
         return x
 
     @torch.no_grad()
@@ -82,17 +87,28 @@ class GAN(pl.LightningModule):
             x - Generated images of shape [B,interpolation_steps+2,C,H,W]
         """
 
-        x = None
-        raise NotImplementedError
+        left = torch.normal(0,1, (batch_size, self.z_dim))
+        right = torch.normal(0,1, (batch_size, self.z_dim))
+
+        interpolated = []
+        for i in reversed(range(interpolation_steps+2)):
+            mix = i/(interpolation_steps+1)
+            mixed_latents = mix * left + (1-mix) * right
+            interpolated.append(self.generator(mixed_latents))
+        
+        x = torch.stack(interpolated, dim=1)
+            
         return x
 
     def configure_optimizers(self):
         # Create optimizer for both generator and discriminator.
         # You can use the Adam optimizer for both models.
         # It is recommended to reduce the momentum (beta1) to e.g. 0.5
-        optimizer_gen = None
-        optimizer_disc = None
-        raise NotImplementedError
+        optimizer_gen = optim.Adam(self.generator.parameters(), lr=self.lr, 
+                                   betas=(0.5, 0.999))
+        optimizer_disc = optim.Adam(self.discriminator.parameters(), lr=self.lr,
+                                    betas=(0.5, 0.999))
+
         return [optimizer_gen, optimizer_disc], []
 
     def training_step(self, batch, batch_idx, optimizer_idx):
@@ -136,10 +152,20 @@ class GAN(pl.LightningModule):
         Outputs:
             loss - The loss for the generator to optimize
         """
+        
+        B = x_real.shape[0]
 
-        loss = None
+        z = torch.normal(0, 1, (B, self.z_dim), device=self.device)
+        x_fake = self.generator(z)
+        
+        y_fake = self.discriminator(x_fake)
+        
+        # t=0 or t=1...
+        #t_fake = torch.ones((B,1), device = self.device)
+        t_fake = torch.ones_like(y_fake)
+        
+        loss = F.binary_cross_entropy(y_fake, t_fake)
         self.log("generator/loss", loss)
-        raise NotImplementedError
 
         return loss
 
@@ -159,10 +185,32 @@ class GAN(pl.LightningModule):
 
         # Remark: there are more metrics that you can add. 
         # For instance, how about the accuracy of the discriminator?
-        loss = None
-        self.log("generator/loss", loss)
-        raise NotImplementedError
-
+        B = x_real.shape[0]
+        
+        z = torch.normal(0, 1, (B, self.z_dim))
+        
+        x_fake = self.generator(z)
+        
+        y_real = self.discriminator(x_real)
+        y_fake = self.discriminator(x_fake)
+        
+        t_real = torch.ones_like(y_real)
+        t_fake = torch.zeros(y_fake)
+        
+        # Because the labels are 0, no need to 1-y for fake images. BCE should
+        # do this automatically
+        loss = (F.binary_cross_entropy(y_real, t_real) + \
+                F.binary_cross_entropy(y_fake, t_fake))/2
+        self.log("discriminator/loss", loss)
+        
+        self.log("discriminator/D(x)", y_real.mean())
+        self.log("discriminator/D(G(z))", y_fake.mean())
+        
+        correct  = (torch.round(y_real) == t_real).sum()
+        correct += (torch.round(y_fake) == t_fake).sum()
+        acc = correct / (float(2*B))
+        self.log("discriminator/acc", acc)
+        
         return loss
 
 
@@ -189,7 +237,10 @@ class GenerateCallback(pl.Callback):
         This function is called after every epoch.
         Call the save_and_sample function every N epochs.
         """
-        if (trainer.current_epoch+1) % self.every_n_epochs == 0:
+        
+        if (trainer.current_epoch == 0 or 
+            (trainer.current_epoch+1) % self.every_n_epochs == 0 or
+            (trainer.current_epoch+1) == trainer.max_epochs):
             self.sample_and_save(trainer, pl_module, trainer.current_epoch+1)
 
     def sample_and_save(self, trainer, pl_module, epoch):
@@ -208,9 +259,21 @@ class GenerateCallback(pl.Callback):
         # - You can access the tensorboard logger via trainer.logger.experiment
         # - Use torchvision function "make_grid" to create a grid of multiple images
         # - Use torchvision function "save_image" to save an image grid to disk
-
-        raise NotImplementedError
-
+        
+        imgs = pl_module.sample(self.batch_size)
+        
+        if self.save_to_disk:
+            save_image(imgs, trainer.logger.log_dir+'/epoch{:d}.png'.format(epoch),
+                       nrow=8)
+                
+        img_grid = make_grid(imgs, nrow=8)
+        img_grid = img_grid.mul(255).add_(0.5).clamp_(0, 255)#.permute(1, 2, 0)
+        img_grid = img_grid.type(torch.ByteTensor).numpy()
+        
+        trainer.logger.experiment.add_image('Generated Digits', 
+                                            img_grid, epoch)
+        
+        return img_grid
 
 class InterpolationCallback(pl.Callback):
 
@@ -239,7 +302,9 @@ class InterpolationCallback(pl.Callback):
         This function is called after every epoch.
         Call the save_and_sample function every N epochs.
         """
-        if (trainer.current_epoch+1) % self.every_n_epochs == 0:
+        if (trainer.current_epoch == 0 or 
+            (trainer.current_epoch+1) % self.every_n_epochs == 0 or
+            (trainer.current_epoch+1) == trainer.max_epochs):
             self.sample_and_save(trainer, pl_module, trainer.current_epoch+1)
 
     def sample_and_save(self, trainer, pl_module, epoch):
@@ -261,8 +326,23 @@ class InterpolationCallback(pl.Callback):
 
         # You also have to implement this function in a later question of the assignemnt. 
         # By default it is skipped to allow you to test your other code so far. 
-        print("WARNING: Interpolation function has not been implemented yet.")
-        pass
+        imgs = pl_module.interpolate(self.batch_size, self.interpolation_steps)
+        
+        #imgs = imgs.permute(1,0,2,3,4)
+
+        img_grid = make_grid(imgs.reshape(imgs.shape[0]*imgs.shape[1], *imgs.shape[-3:]), 
+                             nrow=self.interpolation_steps+2)
+
+        if self.save_to_disk:
+            save_image(img_grid, trainer.logger.log_dir+'/interpolation_epoch{:d}.png'.format(epoch))
+        
+        img_grid = img_grid.mul(255).add_(0.5).clamp_(0, 255)#.permute(1, 2, 0)
+        img_grid = img_grid.type(torch.ByteTensor).numpy()
+        
+        trainer.logger.experiment.add_image('Interpolated Digits', 
+                                            img_grid, epoch)
+        
+        return img_grid
 
 
 def train_gan(args):
@@ -274,8 +354,8 @@ def train_gan(args):
     """
 
     os.makedirs(args.log_dir, exist_ok=True)
-    train_loader = mnist(batch_size=args.batch_size,
-                         num_workers=args.num_workers)
+    train_loader = mnist.mnist(batch_size=args.batch_size, 
+                               num_workers=args.num_workers)
 
     # Create a PyTorch Lightning trainer with the generation callback
     gen_callback = GenerateCallback(save_to_disk=True)
@@ -290,6 +370,8 @@ def train_gan(args):
                          progress_bar_refresh_rate=1 if args.progress_bar else 0)
     # Optional logging argument that we don't need
     trainer.logger._default_hp_metric = None
+    #trainer.logger._version = str(args.z_dim) + '_' + str(args.seed)
+    #os.makedirs(args.log_dir+'/'+trainer.logger._version, exist_ok=True)
 
     # Create model
     pl.seed_everything(args.seed)  # To be reproducable
@@ -306,7 +388,7 @@ def train_gan(args):
               "want to see the progress bar, use the argparse option \"progress_bar\".\n")
 
     # Training
-    gen_callback.sample_and_save(trainer, model, epoch=0)  # Initial sample
+    #gen_callback.sample_and_save(trainer, model, epoch=0)  # Initial sample
     trainer.fit(model, train_loader)
 
     return model
@@ -345,13 +427,13 @@ if __name__ == '__main__':
                         help='Number of epochs to train.')
     parser.add_argument('--seed', default=42, type=int,
                         help='Seed to use for reproducing results')
-    parser.add_argument('--num_workers', default=4, type=int,
+    parser.add_argument('--num_workers', default=2, type=int,
                         help='Number of workers to use in the data loaders.' + \
                              'To have a truly deterministic run, this has to be 0.')
     parser.add_argument('--log_dir', default='GAN_logs/', type=str,
                         help='Directory where the PyTorch Lightning logs ' + \
                              'should be created.')
-    parser.add_argument('--progress_bar', action='store_true',
+    parser.add_argument('--progress_bar', default=True,  action='store_true',
                         help='Use a progress bar indicator for interactive experimentation. '+ \
                              'Not to be used in conjuction with SLURM jobs.')
 

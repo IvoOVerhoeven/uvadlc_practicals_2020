@@ -211,6 +211,7 @@ def train_vae(args):
                          callbacks=[gen_callback],
                          progress_bar_refresh_rate=1 if args.progress_bar else 0) 
     trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need
+    trainer.logger._version = str(args.model) + '_' + str(args.z_dim) + '_' + str(args.seed)
 
     # Create model
     pl.seed_everything(args.seed)  # To be reproducible
