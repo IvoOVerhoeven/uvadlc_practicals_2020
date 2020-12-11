@@ -245,10 +245,10 @@ if __name__ == '__main__':
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # Model hyperparameters
-    parser.add_argument('--model', default='CNN', type=str,
+    parser.add_argument('--model', default='MLP', type=str,
                         help='What model to use in the VAE',
                         choices=['MLP', 'CNN'])
-    parser.add_argument('--z_dim', default=2, type=int,
+    parser.add_argument('--z_dim', default=20, type=int,
                         help='Dimensionality of latent space')
     parser.add_argument('--hidden_dims', default=[512], type=int, nargs='+',
                         help='Hidden dimensionalities to use inside the network. To specify multiple, use " " to separate them. Example: "512 256"')
@@ -286,7 +286,7 @@ if __name__ == '__main__':
     
     model = VAE.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
     if args.z_dim == 2:
-        img_grid = visualize_manifold(model.decoder, grid_size=32)
+        img_grid = visualize_manifold(model.decoder, grid_size=20)
         
         im = Image.fromarray(img_grid)
         im.save(os.path.join(trainer.logger.log_dir, 'vae_manifold.png'), 
